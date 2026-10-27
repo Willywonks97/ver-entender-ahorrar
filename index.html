@@ -353,6 +353,10 @@ button,label,select,summary{touch-action:manipulation}
 .listtoggle .chev{font-size:1.3rem;color:var(--cyan);transition:transform .2s;flex:none}
 .listtoggle[aria-expanded="true"] .chev{transform:rotate(180deg)}
 .listbody{display:flex;flex-direction:column;gap:14px}
+
+.extras{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);padding:12px}
+.extras .switch{font-size:.85rem;align-items:flex-start}
+.summary .big.neg{color:var(--red);text-shadow:0 0 14px rgba(255,59,92,.6)}
 </style>
 </head>
 <body>
@@ -513,7 +517,7 @@ window.addEventListener("error",e=>showErr("Error en la app: "+(e.message||"desc
 window.addEventListener("unhandledrejection",e=>showErr("Error: "+((e.reason&&e.reason.message)||e.reason||"desconocido")));
 /* clave para reconocer el mismo comercio aunque el banco añada números de tarjeta o fechas */
 const ckey=s=>norm(s).replace(/\(ejemplo\)/g,"").replace(/[0-9]+/g," ").replace(/[^a-záéíóúñü ]/gi," ").replace(/\b(compra|tarj|tarjeta|pago|en|recibo|adeudo|de|tpv|movil|móvil|bizum|transferencia|com)\b/g," ").replace(/\s+/g," ").trim();
-const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0,limV:c.limV||0,recHidden:c.recHidden||[],recReview:c.recReview||{},countMoves:!!c.countMoves});
+const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0,limV:c.limV||0,oneOff:c.oneOff||[],recHidden:c.recHidden||[],recReview:c.recReview||{},countMoves:!!c.countMoves});
 
 let state={config:cfg({}),months:{}};
 let view=new Date(); view.setDate(1);
@@ -682,34 +686,34 @@ function render(){
     const hasSpent=totalSpent>0;
     $("sumDaily").textContent=hasSpent?fmt(left/rem)+" al día · quedan "+rem+(rem===1?" día":" días"):fmt(avail/days)+" al día de media";
   } else $("sumDaily").textContent=prog>=1?"mes cerrado":"";
-  // Con meta de ahorro: cuánto puedes gastar al día para cumplirla
+  // Con meta de ahorro: dos datos claros, «hoy» y «este mes»
   const DP=dailyPlan();
-  $("lblSpent").textContent=DP?"Para tu meta":"Gastado";
+  $("lblSpent").textContent=DP?"Hoy puedes gastar":"Gastado";
   if(DP){
     const dim=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
     const diaSpent=items(k).filter(i=>kindOf(i)==="dia").reduce((a,i)=>a+i.amount,0);
     const monthAllowed=DP.perDay*dim, leftM=monthAllowed-diaSpent;
-    $("sumSpent").textContent=fmt(DP.perDay);
-    $("sumOf").textContent="al día · ahorrando "+fmt(DP.goal)+"/mes";
+    $("sumSpent").classList.toggle("neg",false);
+    $("leftLabel").textContent=prog>=1?"Ese mes":"Este mes";
+    $("sumLeft").textContent=fmt(diaSpent);
+    $("sumLeft").classList.toggle("neg",leftM<0);
+    $("sumDaily").textContent=leftM<0?"de "+fmt(monthAllowed)+" · te has pasado "+fmt(-leftM):"de "+fmt(monthAllowed)+" · te quedan "+fmt(leftM);
     if(prog>0&&prog<1){
       const rem=dim-new Date().getDate()+1;
-      $("leftLabel").textContent=leftM>=0?"Hoy puedes gastar":"Este mes te has pasado";
-      $("sumLeft").textContent=fmt(leftM>=0?leftM/rem:-leftM);
-      $("sumLeft").classList.toggle("neg",leftM<0);
-      $("sumDaily").textContent="llevas "+fmt(diaSpent)+" de "+fmt(monthAllowed)+" en el día a día";
+      $("sumSpent").textContent=fmt(Math.max(0,leftM/rem));
+      $("sumSpent").classList.toggle("neg",leftM<=0);
+      $("sumOf").textContent=leftM>0?"para ahorrar "+fmt(DP.goal)+" al mes":"ya has gastado lo de este mes";
     } else if(prog>=1){
-      const avg=diaSpent/dim;
-      $("leftLabel").textContent="Gastaste al día";
-      $("sumLeft").textContent=fmt(avg);
-      $("sumLeft").classList.toggle("neg",avg>DP.perDay);
-      $("sumDaily").textContent=avg<=DP.perDay?"dentro de tu meta":"por encima de tu meta";
+      $("lblSpent").textContent="Gastaste al día";
+      $("sumSpent").textContent=fmt(diaSpent/dim);
+      $("sumSpent").classList.toggle("neg",diaSpent/dim>DP.perDay);
+      $("sumOf").textContent="tu límite: "+fmt(DP.perDay)+" al día";
     } else {
-      $("leftLabel").textContent="Podrás gastar";
-      $("sumLeft").textContent=fmt(monthAllowed);
-      $("sumLeft").classList.remove("neg");
-      $("sumDaily").textContent="en el día a día este mes";
+      $("lblSpent").textContent="Podrás gastar";
+      $("sumSpent").textContent=fmt(DP.perDay);
+      $("sumOf").textContent="al día ese mes";
     }
-  }
+  } else $("sumSpent").classList.remove("neg");
 
   /* Mis límites: barras + avisos */
   const bars=$("bars"); bars.textContent="";
@@ -1117,14 +1121,14 @@ function planNumbers(){
   const cur=monthKey(new Date());
   const ks=Object.keys(state.months).filter(k=>k<cur&&items(k).length).sort().slice(-6);
   const n=ks.length;
-  const dia=[], mov=[], catMonths=Object.create(null), extras=[];
+  const dia=[], mov=[], catMonths=Object.create(null), extras=[], allExtras=[];
   ks.forEach(k=>{
     let d=0,m=0; const byCat=Object.create(null);
     items(k).forEach(i=>{
       const t=kindOf(i);
       if(t==="dia"){d+=i.amount; byCat[i.cat]=(byCat[i.cat]||0)+i.amount}
       else if(t==="mov") m+=i.amount;
-      else if(t==="extra") extras.push(i);
+      else if(t==="extra"){ if(!(state.config.oneOff||[]).includes(ckey(i.concept))) extras.push(i); else allExtras.push(i); }
     });
     dia.push(d); mov.push(m);
     state.config.cats.forEach(c=>{(catMonths[c.id]=catMonths[c.id]||[]).push(byCat[c.id]||0)});
@@ -1138,7 +1142,7 @@ function planNumbers(){
   manual.forEach(f=>recByCat[f.cat]=(recByCat[f.cat]||0)+(+f.amount||0));
   const ih=state.config.incomeHist||{};
   const incomeAuto=median(ks.map(k=>ih[k]||0).filter(v=>v>0));
-  return {ks,n,diaMonthly:median(dia),movMonthly:median(mov),extraMonthly:n?extras.reduce((a,i)=>a+i.amount,0)/n:0,extras,catMed,recMonthly,recByCat,activeRec,incomeAuto};
+  return {ks,n,allExtras:extras.concat(allExtras),diaMonthly:median(dia),movMonthly:median(mov),extraMonthly:n?extras.reduce((a,i)=>a+i.amount,0)/n:0,extras,catMed,recMonthly,recByCat,activeRec,incomeAuto};
 }
 function dailyPlan(){
   const goal=state.config.goal||0; if(!goal) return null;
@@ -1178,6 +1182,21 @@ function renderPlan(){
   const free=income-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0)-P.diaMonthly;
   L.appendChild(ledgerRow(free>=0?"Te sobra":"Te falta",fmt(Math.abs(free)),"tot "+(free>=0?"good":"bad")));
   det.appendChild(L);
+  if(P.allExtras.length){
+    const box=el("div","extras");
+    box.appendChild(el("span","label","Gastos grandes de estos meses"));
+    box.appendChild(el("p","hint","Desmarca los que no se van a repetir (una reparación, una compra puntual). Así no te restan del día a día."));
+    const groups=new Map();
+    P.allExtras.forEach(i=>{const k=ckey(i.concept)||i.id; if(!groups.has(k)) groups.set(k,{name:(i.concept||"").replace(/\s+/g," ").trim(),list:[]}); groups.get(k).list.push(i)});
+    const one=new Set(state.config.oneOff||[]);
+    [...groups.entries()].sort((a,b)=>b[1].list.reduce((x,i)=>x+i.amount,0)-a[1].list.reduce((x,i)=>x+i.amount,0)).forEach(([k,g])=>{
+      const lab=el("label","switch"); const cb=el("input"); cb.type="checkbox"; cb.id="ex-"+k.replace(/[^a-z0-9]/gi,"_"); cb.checked=!one.has(k);
+      cb.onchange=()=>{const set=new Set(state.config.oneOff||[]); if(cb.checked) set.delete(k); else set.add(k); state.config.oneOff=[...set]; saveConfig(); render()};
+      lab.append(cb, g.name+" · "+g.list.map(i=>fmt(i.amount)+" ("+i.date.slice(8,10)+"/"+i.date.slice(5,7)+")").join(", "));
+      box.appendChild(lab);
+    });
+    det.appendChild(box);
+  }
 
   if(!goal){
     const p=el("p","plain");
@@ -1208,7 +1227,7 @@ function renderPlan(){
   out.appendChild(big);
   // --- 2. la cuenta, en una frase ---
   const why=el("p","plain");
-  why.append("La cuenta: cobras "+fmt(income)+" y apartas "+fmt(goal)+" para ahorrar. "+fmt(P.recMonthly)+" se van en suscripciones y recibos"+(P.extraMonthly>1?", y guardo "+fmt(P.extraMonthly)+" al mes para gastos grandes que vienen de vez en cuando"+(extraNames?" ("+extraNames+")":""):"")+". Te quedan "+fmt(allowed)+" para tu día a día: ");
+  why.append("La cuenta: cobras "+fmt(income)+" y apartas "+fmt(goal)+" para ahorrar. "+fmt(P.recMonthly)+" se van en suscripciones y recibos"+(P.extraMonthly>1?", y guardo "+fmt(P.extraMonthly)+" al mes para gastos grandes que vienen de vez en cuando"+(extraNames?" ("+extraNames+"; si no se van a repetir, quítalos en «Ver los números»)":""):"")+". Te quedan "+fmt(allowed)+" para tu día a día: ");
   why.appendChild(el("b",null,fmt(perDay)+" al día"));
   why.append(".");
   out.appendChild(why);
