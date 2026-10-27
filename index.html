@@ -435,7 +435,7 @@ function guessCat(concept,learned,amount){
   if(/estanco|tabac|expendedur/.test(n)) return "tabaco";
   if(/flor|floris|vivero|garden/.test(n)) return "flores";
   // coche: mantenimiento, taller, seguros e impuestos
-  if(!/hogar|vida|salud|sanitas|adeslas|dkv/.test(n)&&/taller|neumatic|norauto|feu vert|midas|euromaster|confortauto|recambio|itv|reale seg|mapfre|linea directa|mutua madrile|allianz|\baxa\b|generali|seguro|impuesto|ivtm|i\.?v\.?t\.?m|vehiculos? traccion|\bdgt\b|trafico|lavado|car wash/.test(n)) return "coche";
+  if(!/hogar|vida|salud|sanitas|adeslas|dkv/.test(n)&&/ayuntamiento|ajuntament|\bayto\b|recaudaci|suma gesti|circulaci|taller|neumatic|norauto|feu vert|midas|euromaster|confortauto|recambio|itv|reale seg|mapfre|linea directa|mutua madrile|allianz|\baxa\b|generali|seguro|impuesto|ivtm|i\.?v\.?t\.?m|vehiculos? traccion|\bdgt\b|trafico|lavado|car wash/.test(n)) return "coche";
   if(FUEL.test(n)) return (+amount>0&&+amount<15)?"tabaco":"trans"; // en la gasolinera: poco = tabaco, mucho = gasolina
   const k=ckey(concept); if(learned[k]) return learned[k];
   for(const [cat,re] of RULES) if(re.test(n)) return cat;
@@ -669,7 +669,7 @@ const EVERY={1:["mensual","cada mes"],3:["trimestral","cada 3 meses"],6:["semest
 // un fijo mensual tiene un importe casi exacto; un seguro anual puede subir o bajar algo de un año a otro
 const ruleMatch=(r,i)=>ckey(i.concept)===r.key&&Math.abs(i.amount-r.amount)<=((r.every||1)>1?r.amount*0.3:Math.max(1,r.amount*0.1));
 const addMonths=(d,n)=>{const x=new Date(+d.slice(0,4),+d.slice(5,7)-1+n,1);return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-01"};
-const INSURE=/seguro|\bseg\b|seg\.|reale|mapfre|linea directa|mutua|allianz|\baxa\b|generali|zurich|ocaso|santalucia|catalana|liberty|ivtm|impuesto|\bitv\b|sitval|\bibi\b|tasa|basura|matricula|colegio|cuota anual|amazon prime/;
+const INSURE=/ayuntamiento|ajuntament|\bayto\b|\bajunt\b|recaudaci|diputaci|suma gesti|circulaci|vehiculos? de traccion|seguro|\bseg\b|seg\.|reale|mapfre|linea directa|mutua|allianz|\baxa\b|generali|zurich|ocaso|santalucia|catalana|liberty|ivtm|impuesto|\bitv\b|sitval|\bibi\b|tasa|basura|matricula|colegio|cuota anual|amazon prime/;
 function computeFixed(){
   const hidden=new Set(state.config.recHidden), all=allItems();
   const list=detectRecurring(all).filter(r=>!hidden.has(r.key)).map(r=>({...r,manual:false}));
