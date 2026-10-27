@@ -318,6 +318,25 @@ button,label,select,summary{touch-action:manipulation}
 .splitrow button{border:1px solid var(--line);background:transparent;color:var(--muted);height:38px}
 .splitnote{font-size:.8rem;color:var(--cyan);font-family:var(--f-num);margin:0}
 @media (max-width:420px){.recsum{grid-template-columns:1fr 1fr}.recsum div:last-child{grid-column:1/-1}}
+
+/* Plan simple */
+.warnbox{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.warnbox p{margin:0}
+.bigq{display:flex;flex-direction:column;gap:8px;font-size:1rem;font-weight:600}
+.smallq{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.88rem;color:var(--muted)}
+.euroin{display:flex;align-items:center;gap:8px;border-bottom:2px solid var(--magenta);padding-bottom:4px}
+.euroin input{border:0;background:transparent;font-family:var(--f-num);font-size:2rem;color:var(--magenta);width:100%;min-width:0;outline:none;padding:0}
+.euroin span{font-family:var(--f-num);font-size:1.4rem;color:var(--muted)}
+.euroin.small{border-bottom-width:1px;border-color:var(--line);max-width:150px}
+.euroin.small input{font-size:1.1rem;color:var(--ink);text-align:right}
+.euroin.small span{font-size:1rem}
+.plain{margin:0;font-size:.95rem;line-height:1.55}
+.plain b{color:var(--cyan);font-family:var(--f-num)}
+.tips{margin:0;padding:0;list-style:none;counter-reset:t;display:flex;flex-direction:column;gap:8px}
+.tips li{counter-increment:t;display:grid;grid-template-columns:26px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);background:rgba(7,8,15,.5);font-size:.92rem}
+.tips li::before{content:counter(t);font-family:var(--f-num);font-weight:700;color:#000;background:var(--magenta);width:22px;height:22px;display:grid;place-items:center;font-size:.75rem}
+.tips li b{font-family:var(--f-num);color:var(--ok);white-space:nowrap}
+.tips li span{grid-column:2}
 </style>
 </head>
 <body>
@@ -385,18 +404,31 @@ button,label,select,summary{touch-action:manipulation}
       <span><i style="background:var(--magenta);width:3px"></i>Donde deberías ir hoy</span>
     </div>
   </section>
+  <section aria-labelledby="h-save">
+    <div class="sechead"><div><h2 id="h-save">Ahorro o exceso por categoría</h2><p>% del presupuesto que te sobra (verde) o que te has pasado (rojo).</p></div></div>
+    <div class="axis" aria-hidden="true"><span></span><div><span>−100%</span><span>0</span><span>+100%</span></div><span></span></div>
+    <div class="div" id="div"></div>
+    <p class="verdict" id="verdict"></p>
+  </section>
   </div>
   <div class="tab" id="tab-ahorro" hidden>
   <section aria-labelledby="h-plan">
-    <div class="sechead"><div><h2 id="h-plan">Tu plan de ahorro</h2><p>Separo tu día a día de los recibos y de los gastos puntuales, y te digo cuánto puedes gastar cada día para llegar a tu meta.</p></div></div>
-    <div class="goal">
-      <label for="income">Ingresos al mes (€)<input id="income" inputmode="decimal" placeholder="1.300" autocomplete="off"></label>
-      <label for="goal">Quiero ahorrar al mes (€)<input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"></label>
-    </div>
-    <label class="switch"><input type="checkbox" id="countMoves"> Contar cajero, bizums y Revolut como gasto</label>
-    <button class="primary" id="calcPlan" type="button">Calcular mi plan</button>
+    <h2 id="h-plan">Tu plan de ahorro</h2>
+    <label class="bigq" for="goal">¿Cuánto quieres ahorrar al mes?
+      <span class="euroin"><input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"><span>€</span></span>
+    </label>
+    <label class="smallq" for="income">Lo que cobras al mes
+      <span class="euroin small"><input id="income" inputmode="decimal" placeholder="1.300" autocomplete="off"><span>€</span></span>
+    </label>
+    <button class="primary" id="calcPlan" type="button">Calcular</button>
     <p class="msg" id="planCalcMsg" role="status"></p>
     <div id="planOut" class="planout"></div>
+    <details id="planMore" hidden><summary class="link">Ver los números</summary>
+      <div class="planout" style="margin-top:12px">
+        <label class="switch"><input type="checkbox" id="countMoves"> Contar cajero, bizums y Revolut como gasto</label>
+        <div id="planDetail" class="planout"></div>
+      </div>
+    </details>
   </section>
   <section aria-labelledby="h-rec">
     <div class="sechead"><div><h2 id="h-rec">Pagos recurrentes</h2><p>Suscripciones y recibos que se cobran solos, separados aunque vengan del mismo sitio. Revisa si los sigues usando.</p></div></div>
@@ -404,12 +436,6 @@ button,label,select,summary{touch-action:manipulation}
     <p class="verdict" id="recCancel" hidden></p>
     <ul class="glist reclist" id="recList"></ul>
     <details id="recOld" hidden><summary class="link" id="recOldSum">Ya no se cobran</summary><ul class="glist reclist" id="recOldList"></ul></details>
-  </section>
-  <section aria-labelledby="h-save">
-    <div class="sechead"><div><h2 id="h-save">Ahorro o exceso por categoría</h2><p>% del presupuesto que te sobra (verde) o que te has pasado (rojo).</p></div></div>
-    <div class="axis" aria-hidden="true"><span></span><div><span>−100%</span><span>0</span><span>+100%</span></div><span></span></div>
-    <div class="div" id="div"></div>
-    <p class="verdict" id="verdict"></p>
   </section>
   </div>
   <div class="tab" id="tab-banco" hidden>
@@ -1067,79 +1093,110 @@ function ledgerRow(label,value,cls,note){
 }
 function renderPlan(){
   const out=$("planOut"); out.textContent="";
+  const det=$("planDetail"); det.textContent="";
   const P=planNumbers();
   const incIn=$("income"), goalIn=$("goal");
   if(document.activeElement!==incIn) incIn.value=state.config.income?String(state.config.income).replace(".",","):"";
   incIn.placeholder=P.incomeAuto?String(Math.round(P.incomeAuto)):"1.300";
   if(document.activeElement!==goalIn) goalIn.value=state.config.goal?String(state.config.goal).replace(".",","):"";
   $("countMoves").checked=!!state.config.countMoves;
-  if(!P.n){out.appendChild(el("p","empty","Necesito al menos un mes completo de gastos para conocer tu mes tipo. Importa tu extracto en Banco o ve apuntando tus gastos."));return}
+  $("planMore").hidden=!P.n;
+  if(!P.n){out.appendChild(el("p","empty","Necesito al menos un mes completo de gastos. Importa tu extracto en Banco o ve apuntando lo que gastas."));return}
   const income=state.config.income||P.incomeAuto, goal=state.config.goal||0, cm=!!state.config.countMoves;
-  // 1. Tu mes tipo
+  const extraNames=P.extras.slice().sort((a,b)=>b.amount-a.amount).slice(0,2).map(i=>(i.concept||"").replace(/\s+/g," ").trim().toLowerCase()).join(", ");
+  const nowDay=P.diaMonthly/30.44;
+
+  // --- detalle (escondido) ---
   const L=el("div","ledger");
-  L.appendChild(el("span","label","Tu mes tipo · según tus últimos "+P.n+(P.n===1?" mes":" meses")));
-  L.appendChild(ledgerRow("Ingresos","+"+fmt(income),"in",state.config.income?"los que has escrito":"detectados en tu banco"));
-  L.appendChild(ledgerRow("Pagos recurrentes","−"+fmt(P.recMonthly),"",P.activeRec.length+" suscripciones y recibos"));
-  const exNames=P.extras.slice().sort((a,b)=>b.amount-a.amount).slice(0,3).map(i=>(i.concept||"").replace(/\s+/g," ").trim()).join(", ");
-  L.appendChild(ledgerRow("Gastos puntuales","−"+fmt(P.extraMonthly),"",P.extras.length?"de media: "+exNames:"no ha habido"));
-  L.appendChild(ledgerRow("Cajero, bizums y Revolut",(cm?"−":"")+fmt(P.movMonthly),cm?"":"off",cm?"cuentan como gasto":"no cuentan (marca la casilla si son gasto)"));
-  L.appendChild(ledgerRow("Día a día","−"+fmt(P.diaMonthly),"",fmt(P.diaMonthly/30.44)+" al día en un mes normal"));
+  L.appendChild(el("span","label","Tu mes normal · últimos "+P.n+(P.n===1?" mes":" meses")));
+  L.appendChild(ledgerRow("Cobras","+"+fmt(income),"in",state.config.income?"lo que has escrito":"detectado en tu banco"));
+  L.appendChild(ledgerRow("Suscripciones y recibos","−"+fmt(P.recMonthly),"",P.activeRec.length+" pagos que se cobran solos"));
+  L.appendChild(ledgerRow("Gastos grandes de vez en cuando","−"+fmt(P.extraMonthly),"",P.extras.length?"media al mes: "+extraNames:"no ha habido"));
+  L.appendChild(ledgerRow("Cajero, bizums y Revolut",(cm?"−":"")+fmt(P.movMonthly),cm?"":"off",cm?"cuentan como gasto":"no cuentan"));
+  L.appendChild(ledgerRow("Día a día","−"+fmt(P.diaMonthly),"",fmt(nowDay)+" al día"));
   const free=income-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0)-P.diaMonthly;
-  L.appendChild(ledgerRow(free>=0?"Te sobra al mes":"Te falta al mes",fmt(Math.abs(free)),"tot "+(free>=0?"good":"bad")));
-  out.appendChild(L);
-  if(!goal){out.appendChild(el("p","empty","Escribe cuánto quieres ahorrar al mes y te digo cuánto puedes gastar cada día."));return}
-  // 2. Lo que puedes gastar al día
-  const allowed=income-goal-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0);
-  const big=el("div","daybox");
-  if(allowed<=0){
-    big.classList.add("bad");
-    big.appendChild(el("p",null,"Con tus recibos y gastos puntuales no te llega para ahorrar "+fmt(goal)+" al mes: después de pagarlos te quedan "+fmt(income-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0))+" para todo lo demás."));
-    big.appendChild(el("p",null,"Prueba con una meta más baja o revisa tus pagos recurrentes de abajo."));
-    out.appendChild(big); return;
+  L.appendChild(ledgerRow(free>=0?"Te sobra":"Te falta",fmt(Math.abs(free)),"tot "+(free>=0?"good":"bad")));
+  det.appendChild(L);
+
+  if(!goal){
+    const p=el("p","plain");
+    p.append("Ahora mismo, en un mes normal ");
+    p.appendChild(el("b",null,free>=0?"te sobran "+fmt(free):"te faltan "+fmt(-free)));
+    p.append(". Escribe arriba cuánto quieres ahorrar y te digo cuánto puedes gastar cada día.");
+    out.appendChild(p); return;
   }
-  const perDay=allowed/30.44, nowDay=P.diaMonthly/30.44;
-  big.appendChild(el("span","label","Para ahorrar "+fmt(goal)+" al mes"));
+  const allowed=income-goal-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0);
+  if(allowed<=0){
+    const b=el("div","daybox bad");
+    b.appendChild(el("p",null,"Ahorrar "+fmt(goal)+" al mes no es posible ahora mismo: entre suscripciones, recibos y gastos grandes ya se te van "+fmt(P.recMonthly+P.extraMonthly)+" de los "+fmt(income)+" que cobras."));
+    b.appendChild(el("p",null,"Prueba con una cantidad más baja."));
+    out.appendChild(b); return;
+  }
+  const perDay=allowed/30.44;
+  // --- 1. la respuesta grande ---
+  const big=el("div","daybox");
+  big.appendChild(el("span","label","Para ahorrar "+fmt(goal)+" al mes puedes gastar"));
   const bn=el("div","bignum"); bn.append(el("b",null,fmt(perDay)),el("span",null," al día")); big.appendChild(bn);
-  big.appendChild(el("p",null,"para tu día a día (comida, bares, tabaco, gasolina, compras…). Ahora gastas "+fmt(nowDay)+" al día."));
-  // hoy
   const now=new Date(), cur=monthKey(now), dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(), rem=dim-now.getDate()+1;
   const diaNow=items(cur).filter(i=>kindOf(i)==="dia").reduce((a,i)=>a+i.amount,0);
-  const monthAllowed=perDay*dim, leftMonth=monthAllowed-diaNow;
+  const leftMonth=perDay*dim-diaNow;
   const today=el("p","today");
-  if(leftMonth>0){today.append("Este mes llevas "+fmt(diaNow)+" de "+fmt(monthAllowed)+". ");today.appendChild(el("b",null,"Hoy puedes gastar "+fmt(leftMonth/rem)));today.append(rem>1?" (y así cada uno de los "+rem+" días que quedan).":".")}
-  else {today.append("Este mes ya llevas "+fmt(diaNow)+" en el día a día: ");today.appendChild(el("b",null,"te has pasado "+fmt(-leftMonth)));today.append(". Lo que gastes hasta fin de mes sale de tu ahorro.")}
+  if(leftMonth>0){today.append("Hoy: ");today.appendChild(el("b",null,"puedes gastar "+fmt(leftMonth/rem)))}
+  else {today.append("Este mes: ");today.appendChild(el("b",null,"te has pasado "+fmt(-leftMonth)));today.append(". Lo que gastes hasta fin de mes sale de tu ahorro.")}
   big.appendChild(today);
   out.appendChild(big);
-  // 3. Dónde recortar
+  // --- 2. la cuenta, en una frase ---
+  const why=el("p","plain");
+  why.append("La cuenta: cobras "+fmt(income)+" y apartas "+fmt(goal)+" para ahorrar. "+fmt(P.recMonthly)+" se van en suscripciones y recibos"+(P.extraMonthly>1?", y guardo "+fmt(P.extraMonthly)+" al mes para gastos grandes que vienen de vez en cuando"+(extraNames?" ("+extraNames+")":""):"")+". Te quedan "+fmt(allowed)+" para tu día a día: ");
+  why.appendChild(el("b",null,fmt(perDay)+" al día"));
+  why.append(".");
+  out.appendChild(why);
+  // --- 3. ¿vas bien? y tres consejos ---
   const gap=P.diaMonthly-allowed;
-  if(gap<=0){out.appendChild(el("p","verdict","Vas bien: a tu ritmo normal ahorrarías "+fmt(goal-gap)+" al mes, "+fmt(-gap)+" más que tu meta."));}
-  else{
-    out.appendChild(el("p","plan-head","Tu día a día tiene que bajar "+fmt(gap)+" al mes ("+fmt(gap/30.44)+" al día). Así lo repartiría, empezando por lo que más margen tiene:"));
+  if(gap<=0){
+    out.appendChild(el("p","verdict","Vas bien: normalmente gastas "+fmt(nowDay)+" al día, menos que tu límite. Si sigues así ahorrarás "+fmt(goal-gap)+" al mes."));
+  } else {
+    const st=el("p","plain"); st.append("Ahora gastas "+fmt(nowDay)+" al día, así que tienes que bajar ");
+    st.appendChild(el("b",null,fmt(gap/30.44)+" al día")); st.append(". Así lo conseguirías:"); out.appendChild(st);
     const rows=state.config.cats.map(c=>({c,avg:P.catMed[c.id]||0,cap:(P.catMed[c.id]||0)*(CUT_MAX[c.id]??.3)})).filter(r=>r.avg>0);
     const capSum=rows.reduce((a,r)=>a+r.cap,0), f=capSum>0?Math.min(1,gap/capSum):0;
     rows.forEach(r=>r.cut=r.cap*f);
+    const tips=[];
+    rows.filter(r=>r.cut>=3&&r.c.id!=="otros").sort((a,b)=>b.cut-a.cut).slice(0,2).forEach(r=>tips.push([r.c.name+": de "+fmt(r.avg/30.44)+" a "+fmt((r.avg-r.cut)/30.44)+" al día",r.cut]));
+    const sub=P.activeRec.slice().sort((a,b)=>b.monthly-a.monthly).find(r=>!(state.config.recReview||{})[r.key]);
+    if(sub) tips.push(["Quita "+sub.name+" si no lo usas ("+fmt(sub.amount)+" "+(FREQ_TXT[sub.freq]||"")+")",sub.monthly]);
+    const otros=rows.find(r=>r.c.id==="otros");
+    if(otros&&otros.avg>100) tips.push(["Mira qué hay en «Otros»: son "+fmt(otros.avg)+" al mes sin clasificar",0]);
+    const ul=el("ol","tips");
+    tips.slice(0,4).forEach(([t,v])=>{const li=el("li"); li.appendChild(el("span",null,t)); if(v>0) li.appendChild(el("b",null,"−"+fmt(v)+"/mes")); ul.appendChild(li)});
+    out.appendChild(ul);
+    // ¿llega con recortes razonables? si no, una meta realista
+    const reach=rows.reduce((a,r)=>a+r.cut,0)+(sub?sub.monthly:0);
+    if(reach<gap-1){
+      const realistic=Math.max(0,Math.floor((goal-(gap-reach))/10)*10);
+      const w=el("div","warnbox");
+      w.appendChild(el("p",null,"Ojo: aunque hicieras todos los recortes razonables, bajarías unos "+fmt(reach)+" al mes, y para ahorrar "+fmt(goal)+" necesitas bajar "+fmt(gap)+"."));
+      if(realistic>0){
+        w.appendChild(el("p",null,"Una meta realista ahora mismo es ahorrar "+fmt(realistic)+" al mes."));
+        const use=el("button","btn go","Usar "+fmt(realistic)+" como meta"); use.type="button";
+        use.onclick=()=>{state.config.goal=realistic; saveConfig(); render(); $("planOut").scrollIntoView({block:"start"})};
+        w.appendChild(use);
+      } else w.appendChild(el("p",null,"Ahora mismo gastas más de lo que cobras: el primer paso es no tener que tirar de ahorros. Empieza por los consejos de arriba y por revisar «Otros»."));
+      out.appendChild(w);
+    } else out.appendChild(el("p","verdict","Con estos cambios llegas a tu meta."));
+    // detalle: todas las categorías + botón presupuestos
     const plan=el("div","plan");
+    plan.appendChild(el("span","label","Recorte por categoría"));
     rows.filter(r=>r.cut>=1).sort((a,b)=>b.cut-a.cut).forEach(r=>{
       const row=el("div","prow");
-      row.appendChild(el("b",null,r.c.name));
-      row.appendChild(el("span","cut","−"+fmt(r.cut)+"/mes"));
-      const bar=el("div","mini"); const a=el("i"),b=el("i","cutpart");
-      a.style.width=((r.avg-r.cut)/r.avg*100)+"%"; b.style.left=a.style.width; b.style.width=(r.cut/r.avg*100)+"%";
-      bar.append(a,b); row.appendChild(bar);
-      row.appendChild(el("small",null,fmt(r.avg/30.44)+" al día → "+fmt((r.avg-r.cut)/30.44)+" al día ("+fmt(r.avg)+" → "+fmt(r.avg-r.cut)+" al mes)"));
+      row.appendChild(el("b",null,r.c.name)); row.appendChild(el("span","cut","−"+fmt(r.cut)+"/mes"));
+      row.appendChild(el("small",null,fmt(r.avg/30.44)+" → "+fmt((r.avg-r.cut)/30.44)+" al día"));
       plan.appendChild(row);
     });
-    out.appendChild(plan);
-    const reach=rows.reduce((a,r)=>a+r.cut,0);
-    const subs=P.activeRec.slice().sort((a,b)=>b.monthly-a.monthly).slice(0,3);
-    if(gap-reach>1) out.appendChild(el("p","warnbox","Con recortes razonables en el día a día llegas a "+fmt(reach)+" de los "+fmt(gap)+" que faltan. El resto tendría que salir de tus pagos recurrentes"+(subs.length?" ("+subs.map(r=>r.name+" "+fmt(r.monthly)+"/mes").join(", ")+")":"")+" o de una meta más baja."));
-    else if(subs.length) out.appendChild(el("p","hint","Otra vía: cancelar "+subs[0].name+" te ahorra "+fmt(subs[0].monthly)+" al mes ("+fmt(subs[0].yearly)+" al año) sin tocar tu día a día."));
+    det.appendChild(plan);
     const apply=el("button","btn go","Usar este plan como presupuestos"); apply.type="button";
-    apply.onclick=()=>{
-      state.config.cats.forEach(c=>{const r=rows.find(x=>x.c===c); const dia=r?r.avg-r.cut:0; c.budget=ceil5(dia+(P.recByCat[c.id]||0))});
-      saveConfig(); render(); $("planMsg").textContent="Presupuestos actualizados. Las barras de la pestaña Mes ya miden contra este plan.";
-    };
-    out.appendChild(apply); out.appendChild(el("p","msg")).id="planMsg";
+    apply.onclick=()=>{state.config.cats.forEach(c=>{const r=rows.find(x=>x.c===c); const dia=r?r.avg-r.cut:0; c.budget=ceil5(dia+(P.recByCat[c.id]||0))}); saveConfig(); render(); $("planMsg").textContent="Presupuestos actualizados en la pestaña Mes."};
+    det.appendChild(apply); det.appendChild(el("p","msg")).id="planMsg";
   }
 }
 let planTimer=null;
