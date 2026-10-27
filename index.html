@@ -357,6 +357,20 @@ button,label,select,summary{touch-action:manipulation}
 .extras{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);padding:12px}
 .extras .switch{font-size:.85rem;align-items:flex-start}
 .summary .big.neg{color:var(--red);text-shadow:0 0 14px rgba(255,59,92,.6)}
+
+.cuenta{display:flex;flex-direction:column;border:1px solid var(--line);padding:6px 14px;background:rgba(7,8,15,.5)}
+.crow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:9px 0;border-top:1px dashed var(--line);font-size:.95rem}
+.crow:first-child{border-top:0}
+.crow>span{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;min-width:0}
+.crow small{flex-basis:100%;color:var(--muted);font-size:.74rem}
+.crow b{font-family:var(--f-num);white-space:nowrap}
+.crow.minus b{color:var(--red)}
+.crow.sub{border-top:1px solid var(--muted)}
+.crow.sub b{color:var(--ink)}
+.crow.total{border-top:2px solid var(--cyan);font-weight:700}
+.crow.total b{color:var(--cyan);font-size:1.15rem}
+.crow.total.bad b{color:var(--red)}
+.inlink{border:0;background:none;color:var(--cyan);text-decoration:underline;font:inherit;font-size:.85rem;padding:0;cursor:pointer}
 </style>
 </head>
 <body>
@@ -456,7 +470,7 @@ button,label,select,summary{touch-action:manipulation}
     </details>
   </section>
   <section aria-labelledby="h-rec">
-    <div class="sechead"><div><h2 id="h-rec">Pagos recurrentes</h2><p>Suscripciones y recibos que se cobran solos, separados aunque vengan del mismo sitio. Revisa si los sigues usando.</p></div></div>
+    <div class="sechead"><div><h2 id="h-rec">Gastos fijos</h2><p>Suscripciones y recibos que se cobran solos cada mes. Revisa si los sigues usando: cada uno te dice cuánto cuesta al año.</p></div></div>
     <div class="recsum" id="recSum"></div>
     <p class="verdict" id="recCancel" hidden></p>
     <ul class="glist reclist" id="recList"></ul>
@@ -500,6 +514,7 @@ const DEFAULT_CATS=[
   {id:"subs",name:"Suscripciones",budget:30},
   {id:"tabaco",name:"Tabaco",budget:0},
   {id:"flores",name:"Flores",budget:0},
+  {id:"coche",name:"Coche",budget:0},
   {id:"otros",name:"Otros",budget:40}
 ];
 const LS="mi-hucha-v1";
@@ -517,7 +532,7 @@ window.addEventListener("error",e=>showErr("Error en la app: "+(e.message||"desc
 window.addEventListener("unhandledrejection",e=>showErr("Error: "+((e.reason&&e.reason.message)||e.reason||"desconocido")));
 /* clave para reconocer el mismo comercio aunque el banco añada números de tarjeta o fechas */
 const ckey=s=>norm(s).replace(/\(ejemplo\)/g,"").replace(/[0-9]+/g," ").replace(/[^a-záéíóúñü ]/gi," ").replace(/\b(compra|tarj|tarjeta|pago|en|recibo|adeudo|de|tpv|movil|móvil|bizum|transferencia|com)\b/g," ").replace(/\s+/g," ").trim();
-const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0,limV:c.limV||0,oneOff:c.oneOff||[],recHidden:c.recHidden||[],recReview:c.recReview||{},countMoves:!!c.countMoves});
+const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0,limV:c.limV||0,cocheV:c.cocheV||0,oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},countMoves:!!c.countMoves});
 
 let state={config:cfg({}),months:{}};
 let view=new Date(); view.setDate(1);
@@ -692,7 +707,7 @@ function render(){
   if(DP){
     const dim=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
     const diaSpent=items(k).filter(i=>kindOf(i)==="dia").reduce((a,i)=>a+i.amount,0);
-    const monthAllowed=DP.perDay*dim, leftM=monthAllowed-diaSpent;
+    const monthAllowed=DP.allowed, leftM=monthAllowed-diaSpent;
     $("sumSpent").classList.toggle("neg",false);
     $("leftLabel").textContent=prog>=1?"Ese mes":"Este mes";
     $("sumLeft").textContent=fmt(diaSpent);
@@ -706,11 +721,11 @@ function render(){
     } else if(prog>=1){
       $("lblSpent").textContent="Gastaste al día";
       $("sumSpent").textContent=fmt(diaSpent/dim);
-      $("sumSpent").classList.toggle("neg",diaSpent/dim>DP.perDay);
-      $("sumOf").textContent="tu límite: "+fmt(DP.perDay)+" al día";
+      $("sumSpent").classList.toggle("neg",diaSpent>DP.allowed);
+      $("sumOf").textContent="tu límite: "+fmt(DP.allowed/dim)+" al día";
     } else {
       $("lblSpent").textContent="Podrás gastar";
-      $("sumSpent").textContent=fmt(DP.perDay);
+      $("sumSpent").textContent=fmt(DP.allowed/dim);
       $("sumOf").textContent="al día ese mes";
     }
   } else $("sumSpent").classList.remove("neg");
@@ -1093,7 +1108,7 @@ function detectRecurring(all){
 }
 
 /* ---------- Plan de ahorro (como un asesor) ---------- */
-const CUT_MAX={super:.15,rest:.45,trans:.15,ocio:.4,compras:.45,hogar:.1,subs:.5,tabaco:.5,flores:.4,otros:.3};
+const CUT_MAX={super:.15,rest:.45,trans:.15,ocio:.4,compras:.45,hogar:.1,subs:.5,tabaco:.5,flores:.4,coche:.05,otros:.3};
 const num=s=>{const v=parseFloat(String(s||"").replace(/\./g,"").replace(",","."));return isFinite(v)?v:0};
 const ceil5=n=>Math.ceil(n/5)*5;
 const MOVE=/revolut|traspaso|transf|reint|cajero|bizum/i;
@@ -1148,7 +1163,7 @@ function dailyPlan(){
   const goal=state.config.goal||0; if(!goal) return null;
   const P=planNumbers(); if(!P.n) return null;
   const income=state.config.income||P.incomeAuto;
-  const allowed=income-goal-P.recMonthly-P.extraMonthly-(state.config.countMoves?P.movMonthly:0);
+  const allowed=income-goal-P.recMonthly-(state.config.reserveExtras?P.extraMonthly:0)-(state.config.countMoves?P.movMonthly:0);
   return allowed>0?{perDay:allowed/30.44,goal,allowed}:null;
 }
 function ledgerRow(label,value,cls,note){
@@ -1185,11 +1200,15 @@ function renderPlan(){
   if(P.allExtras.length){
     const box=el("div","extras");
     box.appendChild(el("span","label","Gastos grandes de estos meses"));
-    box.appendChild(el("p","hint","Desmarca los que no se van a repetir (una reparación, una compra puntual). Así no te restan del día a día."));
+    const rl=el("label","switch"); const rc=el("input"); rc.type="checkbox"; rc.id="reserveExtras"; rc.checked=!!state.config.reserveExtras;
+    rc.onchange=()=>{state.config.reserveExtras=rc.checked; saveConfig(); render()};
+    rl.append(rc,"Guardar cada mes dinero para estos gastos ("+fmt(P.extraMonthly)+" al mes)"); box.appendChild(rl);
+    box.appendChild(el("p","hint",state.config.reserveExtras?"Desmarca los que no se van a repetir (una reparación, una compra puntual).":"Ahora no se restan de lo que puedes gastar. Si vuelven, saldrán de tu ahorro."));
     const groups=new Map();
     P.allExtras.forEach(i=>{const k=ckey(i.concept)||i.id; if(!groups.has(k)) groups.set(k,{name:(i.concept||"").replace(/\s+/g," ").trim(),list:[]}); groups.get(k).list.push(i)});
     const one=new Set(state.config.oneOff||[]);
     [...groups.entries()].sort((a,b)=>b[1].list.reduce((x,i)=>x+i.amount,0)-a[1].list.reduce((x,i)=>x+i.amount,0)).forEach(([k,g])=>{
+      if(!state.config.reserveExtras){ box.appendChild(el("p","hint","· "+g.name+": "+g.list.map(i=>fmt(i.amount)).join(", "))); return; }
       const lab=el("label","switch"); const cb=el("input"); cb.type="checkbox"; cb.id="ex-"+k.replace(/[^a-z0-9]/gi,"_"); cb.checked=!one.has(k);
       cb.onchange=()=>{const set=new Set(state.config.oneOff||[]); if(cb.checked) set.delete(k); else set.add(k); state.config.oneOff=[...set]; saveConfig(); render()};
       lab.append(cb, g.name+" · "+g.list.map(i=>fmt(i.amount)+" ("+i.date.slice(8,10)+"/"+i.date.slice(5,7)+")").join(", "));
@@ -1205,32 +1224,41 @@ function renderPlan(){
     p.append(". Escribe arriba cuánto quieres ahorrar y te digo cuánto puedes gastar cada día.");
     out.appendChild(p); return;
   }
-  const allowed=income-goal-P.recMonthly-P.extraMonthly-(cm?P.movMonthly:0);
+  const reserve=state.config.reserveExtras?P.extraMonthly:0, movCost=cm?P.movMonthly:0;
+  const toSpend=income-goal, allowed=toSpend-P.recMonthly-reserve-movCost;
+  // --- 1. la cuenta, paso a paso ---
+  const C=el("div","cuenta");
+  const line=(label,val,cls)=>{const r=el("div","crow"+(cls?" "+cls:"")); if(typeof label==="string") r.appendChild(el("span",null,label)); else r.appendChild(label); r.appendChild(el("b",null,val)); C.appendChild(r)};
+  line("Cobras",fmt(income));
+  line("Quieres ahorrar","−"+fmt(goal),"minus");
+  line("Para gastar",fmt(toSpend),"sub");
+  const fx=el("span"); fx.append("Gastos fijos ");
+  const lk=el("button","inlink","ver"); lk.type="button"; lk.onclick=()=>{const h=$("h-rec"); h&&h.scrollIntoView({behavior:"smooth",block:"start"})};
+  fx.append(lk); fx.appendChild(el("small",null,P.activeRec.length+" suscripciones y recibos"));
+  line(fx,"−"+fmt(P.recMonthly),"minus");
+  if(reserve>0) line("Reserva para gastos grandes","−"+fmt(reserve),"minus");
+  if(movCost>0) line("Cajero, bizums y Revolut","−"+fmt(movCost),"minus");
+  line("Te queda para gastar",fmt(allowed),"total"+(allowed<=0?" bad":""));
+  out.appendChild(C);
   if(allowed<=0){
-    const b=el("div","daybox bad");
-    b.appendChild(el("p",null,"Ahorrar "+fmt(goal)+" al mes no es posible ahora mismo: entre suscripciones, recibos y gastos grandes ya se te van "+fmt(P.recMonthly+P.extraMonthly)+" de los "+fmt(income)+" que cobras."));
-    b.appendChild(el("p",null,"Prueba con una cantidad más baja."));
-    out.appendChild(b); return;
+    out.appendChild(el("p","warnbox","Con "+fmt(toSpend)+" para gastar no te llega ni para los gastos fijos. Prueba a ahorrar menos o revisa tus gastos fijos."));
+    return;
   }
-  const perDay=allowed/30.44;
-  // --- 1. la respuesta grande ---
-  const big=el("div","daybox");
-  big.appendChild(el("span","label","Para ahorrar "+fmt(goal)+" al mes puedes gastar"));
-  const bn=el("div","bignum"); bn.append(el("b",null,fmt(perDay)),el("span",null," al día")); big.appendChild(bn);
   const now=new Date(), cur=monthKey(now), dim=new Date(now.getFullYear(),now.getMonth()+1,0).getDate(), rem=dim-now.getDate()+1;
+  const perDay=allowed/dim;
+  // --- 2. al día y hoy ---
+  const big=el("div","daybox");
+  big.appendChild(el("span","label","Eso es"));
+  const bn=el("div","bignum"); bn.append(el("b",null,fmt(perDay)),el("span",null," al día")); big.appendChild(bn);
+  big.appendChild(el("p",null,"para todo lo demás: comida, bares, tabaco, gasolina, compras…"));
   const diaNow=items(cur).filter(i=>kindOf(i)==="dia").reduce((a,i)=>a+i.amount,0);
-  const leftMonth=perDay*dim-diaNow;
+  const leftMonth=allowed-diaNow;
   const today=el("p","today");
-  if(leftMonth>0){today.append("Hoy: ");today.appendChild(el("b",null,"puedes gastar "+fmt(leftMonth/rem)))}
-  else {today.append("Este mes: ");today.appendChild(el("b",null,"te has pasado "+fmt(-leftMonth)));today.append(". Lo que gastes hasta fin de mes sale de tu ahorro.")}
+  if(leftMonth>0){today.append("Este mes llevas "+fmt(diaNow)+". ");today.appendChild(el("b",null,"Hoy puedes gastar "+fmt(leftMonth/rem)))}
+  else {today.append("Este mes llevas "+fmt(diaNow)+": ");today.appendChild(el("b",null,"te has pasado "+fmt(-leftMonth)));today.append(". Lo que gastes hasta fin de mes sale de tu ahorro.")}
   big.appendChild(today);
   out.appendChild(big);
-  // --- 2. la cuenta, en una frase ---
-  const why=el("p","plain");
-  why.append("La cuenta: cobras "+fmt(income)+" y apartas "+fmt(goal)+" para ahorrar. "+fmt(P.recMonthly)+" se van en suscripciones y recibos"+(P.extraMonthly>1?", y guardo "+fmt(P.extraMonthly)+" al mes para gastos grandes que vienen de vez en cuando"+(extraNames?" ("+extraNames+"; si no se van a repetir, quítalos en «Ver los números»)":""):"")+". Te quedan "+fmt(allowed)+" para tu día a día: ");
-  why.appendChild(el("b",null,fmt(perDay)+" al día"));
-  why.append(".");
-  out.appendChild(why);
+  if(!reserve&&P.extraMonthly>20) out.appendChild(el("p","hint","Ojo: en los últimos meses tuviste gastos grandes ("+extraNames+"…), unos "+fmt(P.extraMonthly)+" al mes de media. No los resto aquí; si vuelven, saldrán de tu ahorro. Puedes reservar para ellos en «Ver los números»."));
   // --- 3. ¿vas bien? y tres consejos ---
   const gap=P.diaMonthly-allowed;
   if(gap<=0){
@@ -1374,6 +1402,8 @@ function guessCat(concept,learned,amount){
   if(/vehicles sa|vehicules sa/.test(n)) return (+amount>0&&+amount<15)?"rest":"trans";
   if(/estanco|tabac|expendedur/.test(n)) return "tabaco";
   if(/flor|floris|vivero|garden/.test(n)) return "flores";
+  // coche: mantenimiento, taller, seguros e impuestos
+  if(!/hogar|vida|salud|sanitas|adeslas|dkv/.test(n)&&/taller|neumatic|norauto|feu vert|midas|euromaster|confortauto|recambio|itv|reale seg|mapfre|linea directa|mutua madrile|allianz|\baxa\b|generali|seguro|impuesto|ivtm|i\.?v\.?t\.?m|vehiculos? traccion|\bdgt\b|trafico|lavado|car wash/.test(n)) return "coche";
   if(FUEL.test(n)) return (+amount>0&&+amount<15)?"tabaco":"trans"; // en la gasolinera: poco = tabaco, mucho = gasolina
   const k=ckey(concept); if(learned[k]) return learned[k];
   for(const [cat,re] of RULES) if(re.test(n)) return cat;
@@ -1623,8 +1653,8 @@ function previewCSV(){
       refreshRecurring(); const found=REC.filter(r=>r.active);
       touched.forEach(saveMonth); saveConfig();
       const out=$("importOut"); out.textContent="";
-      out.appendChild(el("p","msg","Importados "+r.exp.length+" gastos de "+touched.size+" meses. "+(found.length?"He encontrado "+found.length+" pagos recurrentes: los tienes en Ahorro → Pagos recurrentes.":"No he encontrado pagos que se repitan.")));
-      const go=el("button","btn go","Ver pagos recurrentes"); go.type="button"; go.onclick=()=>{setTab("ahorro");const f=$("h-rec");f&&f.scrollIntoView({block:"start"})}; out.appendChild(go);
+      out.appendChild(el("p","msg","Importados "+r.exp.length+" gastos de "+touched.size+" meses. "+(found.length?"He encontrado "+found.length+" gastos fijos (suscripciones y recibos): los tienes en Ahorro → Gastos fijos.":"No he encontrado pagos que se repitan.")));
+      const go=el("button","btn go","Ver gastos fijos"); go.type="button"; go.onclick=()=>{setTab("ahorro");const f=$("h-rec");f&&f.scrollIntoView({block:"start"})}; out.appendChild(go);
       csv=null; render();
     }catch(e){
       btn.disabled=false; showErr("No se pudo importar: "+(e&&e.message||e));
@@ -1649,6 +1679,11 @@ function recatOtros(){
   });
   state.config.fixed.forEach(f=>{if(f.cat==="otros"){const c=guessCat(f.concept,Object.create(null),f.amount); if(c!=="otros") f.cat=c}});
   return n;
+}
+if((state.config.cocheV||0)<1){
+  if(!state.config.cats.some(c=>c.id==="coche")){ const o=state.config.cats.findIndex(c=>c.id==="otros"); state.config.cats.splice(o<0?state.config.cats.length:o,0,{id:"coche",name:"Coche",budget:0}); }
+  Object.entries(state.months).forEach(([mk,list])=>{let ch=false;list.forEach(i=>{if((i.cat==="otros"||i.cat==="hogar"||i.cat==="trans")&&guessCat(i.concept,Object.create(null),i.amount)==="coche"){i.cat="coche";ch=true}});if(ch)saveMonth(mk)});
+  state.config.cocheV=1; saveConfig();
 }
 if((state.config.limV||0)<1){
   const by=id=>state.config.cats.find(c=>c.id===id);
