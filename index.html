@@ -636,7 +636,7 @@ function cfg(c){c=c||{};return{
   cats:Array.isArray(c.cats)&&c.cats.length?c.cats:DEFAULT_CATS.map(x=>({...x})),
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
-  countMoves:!!c.countMoves,triaged:c.triaged||[],lastBackup:c.lastBackup||"",v:c.v||0}}
+  countMoves:!!c.countMoves,triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
   state={config:cfg({}),months:{}};
@@ -665,20 +665,27 @@ function removeItem(it){const k=it.date.slice(0,7);state.months[k]=items(k).filt
 
 /* ================= Gastos fijos ================= */
 let FIX=[],FIX_IDS=new Set(),PLAN=null;
-const ruleMatch=(r,i)=>ckey(i.concept)===r.key&&Math.abs(i.amount-r.amount)<=Math.max(1,r.amount*0.1);
+const EVERY={1:["mensual","cada mes"],3:["trimestral","cada 3 meses"],6:["semestral","cada 6 meses"],12:["anual","cada año"]};
+// un fijo mensual tiene un importe casi exacto; un seguro anual puede subir o bajar algo de un año a otro
+const ruleMatch=(r,i)=>ckey(i.concept)===r.key&&Math.abs(i.amount-r.amount)<=((r.every||1)>1?r.amount*0.3:Math.max(1,r.amount*0.1));
+const addMonths=(d,n)=>{const x=new Date(+d.slice(0,4),+d.slice(5,7)-1+n,1);return x.getFullYear()+"-"+pad(x.getMonth()+1)+"-01"};
+const INSURE=/seguro|\bseg\b|seg\.|reale|mapfre|linea directa|mutua|allianz|\baxa\b|generali|zurich|ocaso|santalucia|catalana|liberty|ivtm|impuesto|\bitv\b|sitval|\bibi\b|tasa|basura|matricula|colegio|cuota anual|amazon prime/;
 function computeFixed(){
   const hidden=new Set(state.config.recHidden), all=allItems();
   const list=detectRecurring(all).filter(r=>!hidden.has(r.key)).map(r=>({...r,manual:false}));
   state.config.fixedRules.forEach(rule=>{
     const m=all.filter(i=>ruleMatch(rule,i)).sort((a,b)=>a.date.localeCompare(b.date));
-    const twin=list.find(r=>r.root===merchantRoot(rule.concept)&&Math.abs(r.avg-rule.amount)<=Math.max(1,r.avg*0.1));
+    const ev=rule.every||1;
+    const twin=ev===1&&list.find(r=>r.root===merchantRoot(rule.concept)&&Math.abs(r.avg-rule.amount)<=Math.max(1,r.avg*0.1));
     if(twin){twin.manual=true;twin.ruleId=rule.id;twin.active=true;m.forEach(x=>{if(!twin.items.includes(x))twin.items.push(x)});return}
+    // si el detector ya lo tenía como otra serie, la regla manda
+    m.forEach(x=>list.forEach(r=>{if(!r.ruleId)r.items=r.items.filter(y=>y!==x)}));
     const last=m[m.length-1];
-    list.push({key:"rule|"+rule.id,ruleId:rule.id,manual:true,root:merchantRoot(rule.concept),name:rule.concept,freq:"mensual",per:30.44,
-      amount:rule.amount,avg:rule.amount,count:m.length,first:m[0]?m[0].date:"",last:last?last.date:"",cat:rule.cat,
-      yearly:rule.amount*12,monthly:rule.amount,active:true,items:m});
+    list.push({key:"rule|"+rule.id,ruleId:rule.id,manual:true,every:ev,root:merchantRoot(rule.concept),name:rule.concept,freq:EVERY[ev][0],per:30.44*ev,
+      amount:last?last.amount:rule.amount,avg:rule.amount,count:m.length,first:m[0]?m[0].date:"",last:last?last.date:"",cat:rule.cat,
+      next:last&&ev>1?addMonths(last.date,ev):"",yearly:rule.amount*12/ev,monthly:rule.amount/ev,active:true,items:m});
   });
-  FIX=list.sort((a,b)=>(b.active-a.active)||(b.monthly-a.monthly));
+  FIX=list.filter(r=>r.ruleId||r.items.length>=2).sort((a,b)=>(b.active-a.active)||(b.monthly-a.monthly));
   FIX_IDS=new Set();FIX.forEach(r=>r.items.forEach(i=>FIX_IDS.add(i.id)));
 }
 const MOVE=/revolut|traspaso|transf|reint|cajero|bizum/i;
@@ -882,7 +889,13 @@ function openEditor(item){
     // fijo
     const isFix=item&&FIX_IDS.has(item.id);
     const fl=el("label","switch"); const fx=el("input"); fx.type="checkbox"; fx.id="e-fixed"; fx.checked=!!isFix;
-    fl.append(fx,"Es un gasto fijo (se cobra cada mes con este importe)"); p.appendChild(fl);
+    fl.append(fx,"Es un gasto fijo (se repite: cada mes, cada año…)"); p.appendChild(fl);
+    const curRule=item?state.config.fixedRules.find(r=>ruleMatch(r,item)):null;
+    const evSel=el("select","sel"); evSel.id="e-every"; evSel.setAttribute("aria-label","Cada cuánto se paga");
+    [1,3,6,12].forEach(n=>evSel.appendChild(new Option("Se paga "+EVERY[n][1],String(n))));
+    evSel.value=String(curRule?curRule.every||1:(item&&INSURE.test(norm(item.concept))&&item.amount>=30?12:1));
+    evSel.hidden=!fx.checked; p.appendChild(evSel);
+    fx.addEventListener("change",()=>{evSel.hidden=!fx.checked});
     // aplicar a todos
     let allBox=null;
     if(item){const k=ckey(item.concept);const others=k?allItems().filter(x=>x!==item&&ckey(x.concept)===k).length:0;
@@ -907,9 +920,11 @@ function openEditor(item){
       if(allBox&&allBox.checked){const k=ckey(concept);allItems().forEach(i=>{if(!i.splitOf&&ckey(i.concept)===k)i.cat=sel.v})}
       // fijo sí / no
       const key=ckey(concept);
-      if(fx.checked&&!isFix){
-        if(!state.config.fixedRules.some(r=>r.key===key&&Math.abs(r.amount-main.amount)<=Math.max(1,r.amount*0.1)))
-          state.config.fixedRules.push({id:uid(),key,concept,amount:main.amount,cat:main.cat});
+      const every=+evSel.value||1;
+      if(fx.checked&&curRule){curRule.every=every;curRule.amount=main.amount;curRule.cat=main.cat}
+      else if(fx.checked&&(!isFix||every>1)){
+        if(!state.config.fixedRules.some(r=>ruleMatch(r,main)))
+          state.config.fixedRules.push({id:uid(),key,concept,amount:main.amount,cat:main.cat,every});
       } else if(!fx.checked&&isFix){
         const before=state.config.fixedRules.length;
         state.config.fixedRules=state.config.fixedRules.filter(r=>!ruleMatch(r,main));
@@ -981,7 +996,8 @@ function renderPlan(){
   row("Quieres ahorrar","−"+fmt(P.goal),"minus");
   row("Para gastar",fmt(P.income-P.goal),"sub");
   const fl=el("span"); fl.append("Gastos fijos "); const lk=el("button","link","ver"); lk.type="button"; lk.onclick=()=>$("h-fijos").scrollIntoView({behavior:"smooth",block:"start"}); fl.appendChild(lk);
-  row(fl,"−"+fmt(P.fixedMonthly),"minus",P.active.length+" suscripciones y recibos");
+  const yearlyPart=P.active.filter(r=>r.every>1||r.per>40).reduce((a,r)=>a+r.monthly,0);
+  row(fl,"−"+fmt(P.fixedMonthly),"minus",P.active.length+" suscripciones y recibos"+(yearlyPart?" · incluye "+fmt(yearlyPart)+"/mes para pagos anuales":""));
   if(P.reserve>0) row("Reserva gastos grandes","−"+fmt(P.reserve),"minus");
   row("Te queda para tu día a día",fmt(P.allowed),"total");
   out.appendChild(flow);
@@ -1046,7 +1062,9 @@ function renderFixed(){
   const card=r=>{
     const d=el("div","fx"+(rev[r.key]==="cancel"?" cancel":""));
     d.append(el("b",null,r.name),el("span","a",fmt(r.amount)+" "+(FREQ_TXT[r.freq]||"")));
-    const meta=catById(r.cat).name+(r.count?" · "+r.count+" cobros · "+mshort(r.first)+" → "+mshort(r.last):"")+" · "+fmt(r.yearly)+" al año"+(r.manual?" · marcado por ti":"");
+    const meta=(r.every>1||r.per>40)
+      ?catById(r.cat).name+" · apartas "+fmt(r.monthly)+" al mes"+(r.last?" · último: "+mshort(r.last):"")+(r.next?" · próximo: "+mshort(r.next):"")+(r.manual?" · marcado por ti":"")
+      :catById(r.cat).name+(r.count?" · "+r.count+" cobros · "+mshort(r.first)+" → "+mshort(r.last):"")+" · "+fmt(r.yearly)+" al año"+(r.manual?" · marcado por ti":"");
     const sm=el("small",null,meta); sm.style.gridColumn="1/-1"; d.appendChild(sm);
     if(r.active){
       const a=el("div","acts");
@@ -1059,6 +1077,22 @@ function renderFixed(){
     return d;
   };
   const L=$("fixList"); L.textContent="";
+  // ¿pagos anuales? (seguros, ITV, impuestos… que solo aparecen una vez)
+  const no=new Set(state.config.annualNo||[]);
+  const cand=allItems().filter(i=>i.amount>=30&&INSURE.test(norm(i.concept))&&!FIX_IDS.has(i.id)&&!no.has(i.id)).sort((a,b)=>b.date.localeCompare(a.date));
+  if(cand.length){
+    const box=el("div","advice warn"); box.appendChild(el("b",null,"¿Son pagos que se repiten cada año?"));
+    box.appendChild(el("p","note","Seguros, ITV o impuestos solo aparecen una vez en tus datos. Si se repiten, los reparto por meses para que no te pillen por sorpresa."));
+    cand.slice(0,6).forEach(i=>{
+      const r=el("div","fx"); r.append(el("b",null,i.concept),el("span","a",fmt(i.amount)));
+      const sm=el("small",null,fmtDay(i.date)+" · "+catById(i.cat).name); sm.style.gridColumn="1/-1"; r.appendChild(sm);
+      const a=el("div","acts");
+      [[12,"Cada año"],[6,"Cada 6 meses"]].forEach(([ev,t])=>{const b=el("button","btn go",t);b.type="button";b.onclick=()=>{state.config.fixedRules.push({id:uid(),key:ckey(i.concept),concept:i.concept,amount:i.amount,cat:i.cat,every:ev});save();renderAll();toast(i.concept+": "+fmt(i.amount/ev)+" al mes apartados")};a.appendChild(b)});
+      const nb=el("button","btn","No se repite");nb.type="button";nb.onclick=()=>{(state.config.annualNo=state.config.annualNo||[]).push(i.id);save();renderAll()};a.appendChild(nb);
+      r.appendChild(a); box.appendChild(r);
+    });
+    L.appendChild(box);
+  }
   if(!act.length) L.appendChild(el("p","empty","No hay gastos fijos todavía. Se detectan solos al importar varios meses, o puedes añadirlos."));
   act.forEach(r=>L.appendChild(card(r)));
   const cancel=act.filter(r=>rev[r.key]==="cancel").reduce((a,r)=>a+r.monthly,0);
@@ -1070,13 +1104,14 @@ $("addFixed").onclick=()=>{
   const sel={v:"subs"};
   openSheet(p=>{
     sheetHead(p,"Nuevo gasto fijo");
-    p.appendChild(el("p","note","Algo que pagas cada mes: alquiler, móvil, gimnasio, una suscripción…"));
+    p.appendChild(el("p","note","Algo que pagas siempre: alquiler, móvil, gimnasio, seguro del coche, IBI…"));
     const ci=el("input","txt"); ci.placeholder="Nombre (ej. Gimnasio)"; ci.id="nf-c"; ci.setAttribute("aria-label","Nombre");
-    const am=el("label","money"); const ai=el("input"); ai.inputMode="decimal"; ai.placeholder="0,00"; ai.id="nf-a"; ai.setAttribute("aria-label","Importe al mes"); am.append(ai,el("span",null,"€ al mes"));
-    p.append(ci,am,el("span","label","Categoría"),catPicker(sel));
+    const am=el("label","money"); const ai=el("input"); ai.inputMode="decimal"; ai.placeholder="0,00"; ai.id="nf-a"; ai.setAttribute("aria-label","Importe"); am.append(ai,el("span",null,"€"));
+    const ev=el("select","sel"); ev.id="nf-e"; ev.setAttribute("aria-label","Cada cuánto"); [1,3,6,12].forEach(n=>ev.appendChild(new Option("Se paga "+EVERY[n][1],String(n))));
+    p.append(ci,am,ev,el("span","label","Categoría"),catPicker(sel));
     const msg=el("p","msg"); const sv=el("button","save","Guardar"); sv.type="button"; p.append(msg,sv);
     sv.onclick=()=>{const c=ci.value.trim(),a=num(ai.value);if(!c||!(a>0)){msg.className="msg err";msg.textContent="Pon nombre e importe.";return}
-      state.config.fixedRules.push({id:uid(),key:ckey(c)||c.toLowerCase(),concept:c,amount:Math.round(a*100)/100,cat:sel.v});save();closeSheet();renderAll();toast("Gasto fijo añadido")};
+      state.config.fixedRules.push({id:uid(),key:ckey(c)||c.toLowerCase(),concept:c,amount:Math.round(a*100)/100,cat:sel.v,every:+ev.value||1});save();closeSheet();renderAll();toast("Gasto fijo añadido")};
   });
 };
 
