@@ -238,6 +238,40 @@ button,label,select,summary{touch-action:manipulation}
 .signsel{border-color:var(--line);color:var(--ink);font-size:.8rem}
 .stepno{font-family:var(--f-num);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--magenta)}
 .hdr-note{display:flex;align-items:center;gap:8px}
+
+/* Rediseño: lista de gastos editable, ordenar, filtrar */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.addsec{gap:12px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line)}
+.seg button{border:0;background:transparent;color:var(--muted);font-family:var(--f-num);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;padding:8px 11px;min-height:36px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--magenta);color:#000;font-weight:700}
+.fchip{border:1px solid var(--cyan);background:rgba(22,242,229,.08);color:var(--cyan);font-family:var(--f-num);font-size:.7rem;text-transform:uppercase;padding:7px 10px}
+.glist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.glist li.grp{display:flex;justify-content:space-between;gap:8px;padding:12px 0 4px;border-top:1px solid var(--line);font-family:var(--f-num);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--cyan)}
+.glist li.grp:first-child{border-top:0;padding-top:0}
+.glist li.grp span{color:var(--muted)}
+.glist li.it{border-top:1px dashed var(--line)}
+.glist li.grp+li.it{border-top:0}
+.rowbtn{display:grid;grid-template-columns:42px minmax(0,1fr) auto 14px;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:11px 0;color:inherit;font:inherit;cursor:pointer}
+.rowbtn:hover{background:linear-gradient(90deg,rgba(22,242,229,.06),transparent)}
+.rowbtn .what b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rowbtn .what small{display:block;color:var(--muted);font-size:.74rem;font-family:var(--f-num);text-transform:uppercase;letter-spacing:.04em}
+.rowbtn .chev{color:var(--muted);font-size:.8rem;transition:transform .2s}
+.rowbtn[aria-expanded="true"] .chev{transform:rotate(90deg);color:var(--cyan)}
+.rowedit{margin:0 0 12px;padding:12px;border:1px solid var(--cyan);background:rgba(7,8,15,.7);display:flex;flex-direction:column;gap:12px}
+.rowedit label.f{display:flex;flex-direction:column;gap:5px;font-family:var(--f-num);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.rowedit select{padding:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:.95rem;text-transform:none;letter-spacing:0;font-family:var(--f-body)}
+.rowedit .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center}
+.switch{display:flex;align-items:center;gap:10px;font-size:.92rem;cursor:pointer}
+.switch input{appearance:none;-webkit-appearance:none;width:44px;height:24px;border:1px solid var(--line);background:var(--track);position:relative;cursor:pointer;flex:none;margin:0}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;background:var(--muted);transition:left .15s}
+.switch input:checked{background:rgba(252,238,10,.15);border-color:var(--yellow)}
+.switch input:checked::after{left:23px;background:var(--yellow)}
+.hint{font-size:.78rem;color:var(--muted);margin:0}
+.bar.pick{cursor:pointer;padding:4px 6px;margin:-4px -6px;border:1px solid transparent}
+.bar.pick[aria-pressed="true"]{border-color:var(--cyan);background:rgba(22,242,229,.06)}
 </style>
 </head>
 <body>
@@ -258,36 +292,16 @@ button,label,select,summary{touch-action:manipulation}
     </div>
     <p class="note" id="syncNote">Guardando en este dispositivo.</p>
   </header>
-  <nav class="tabbar" aria-label="Secciones"><button type="button" data-tab="home" aria-label="Inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>Inicio</button><button type="button" data-tab="add" aria-label="Apuntar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Apuntar</button><button type="button" data-tab="plan" aria-label="Plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg>Plan</button><button type="button" data-tab="fixed" aria-label="Fijos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0114-5l2 2M20 12a8 8 0 01-14 5l-2-2M20 4v5h-5M4 20v-5h5"/></svg>Fijos</button><button type="button" data-tab="import" aria-label="Banco"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>Banco</button></nav>
+<nav class="tabbar" aria-label="Secciones"><button type="button" data-tab="mes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v15H4zM4 10h16M9 3v4M15 3v4"/></svg>Mes</button><button type="button" data-tab="ahorro"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l4-4 3 3 5-6"/></svg>Ahorro</button><button type="button" data-tab="banco"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>Banco</button></nav>
   <div class="errbar" id="errBar" role="alert" hidden><span id="errText"></span><button type="button" id="errClose">Cerrar</button></div>
 
   <main>
-  <div class="tab" id="tab-home">
+  <div class="tab" id="tab-mes">
   <p class="quote" id="quote" aria-live="polite"><span class="qtag">MSG://</span> <span id="quoteText"></span></p>
-  <section aria-labelledby="h-bars">
-    <div class="sechead">
-      <div><h2 id="h-bars">Presupuesto por categoría</h2><p>Lo gastado este mes frente a lo que te permites.</p></div>
-      <button class="link" id="editBudgets" type="button">Editar presupuestos</button>
-    </div>
-    <div class="bars" id="bars"></div>
-    <div class="legend" id="legend">
-      <span><i style="background:var(--ok)"></i>Vas bien</span>
-      <span><i style="background:var(--warn)"></i>Por encima del ritmo</span>
-      <span><i style="background:var(--bad)"></i>Te has pasado</span>
-      <span><i style="background:var(--magenta);width:3px"></i>Donde deberías ir hoy</span>
-    </div>
-  </section>
-  <section aria-labelledby="h-save">
-    <div class="sechead"><div><h2 id="h-save">Ahorro o exceso por categoría</h2><p>% del presupuesto que te sobra (verde) o que te has pasado (rojo).</p></div></div>
-    <div class="axis" aria-hidden="true"><span></span><div><span>−100%</span><span>0</span><span>+100%</span></div><span></span></div>
-    <div class="div" id="div"></div>
-    <p class="verdict" id="verdict"></p>
-  </section>
-  </div>
-  <div class="tab" id="tab-add" hidden>
-  <section aria-labelledby="h-add">
-    <h2 id="h-add">Apuntar gasto</h2>
-    <form id="form" novalidate>
+  <section aria-labelledby="h-add" class="addsec">
+    <button class="primary" id="addToggle" type="button" aria-expanded="false" aria-controls="form">+ Apuntar gasto</button>
+    <h2 id="h-add" class="sr">Apuntar gasto</h2>
+    <form id="form" novalidate hidden>
       <label class="amount"><input id="amount" inputmode="decimal" placeholder="0,00" aria-label="Importe" autocomplete="off"><span>€</span></label>
       <div class="chips" id="catChips" role="radiogroup" aria-label="Categoría"></div>
       <div class="fields">
@@ -299,13 +313,32 @@ button,label,select,summary{touch-action:manipulation}
       <button class="primary" type="submit">Apuntar</button>
       <p class="msg" id="msg" role="status"></p>
     </form>
-    <div>
-      <div class="sechead"><span class="label">Movimientos del mes</span><span class="label num" id="count"></span></div>
-      <ul class="list" id="list"></ul>
+  </section>
+  <section aria-labelledby="h-list" id="listSec">
+    <div class="sechead"><div><h2 id="h-list">Gastos del mes</h2><p id="listInfo"></p></div></div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Ordenar por">
+        <button type="button" data-sort="date">Fecha</button><button type="button" data-sort="amount">Importe</button><button type="button" data-sort="cat">Categoría</button>
+      </div>
+      <button type="button" class="fchip" id="filterChip" hidden></button>
+    </div>
+    <ul class="glist" id="list"></ul>
+  </section>
+  <section aria-labelledby="h-bars">
+    <div class="sechead">
+      <div><h2 id="h-bars">Presupuesto por categoría</h2><p>Toca una categoría para ver solo sus gastos.</p></div>
+      <button class="link" id="editBudgets" type="button">Editar presupuestos</button>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="legend" id="legend">
+      <span><i style="background:var(--ok)"></i>Vas bien</span>
+      <span><i style="background:var(--warn)"></i>Por encima del ritmo</span>
+      <span><i style="background:var(--bad)"></i>Te has pasado</span>
+      <span><i style="background:var(--magenta);width:3px"></i>Donde deberías ir hoy</span>
     </div>
   </section>
   </div>
-  <div class="tab" id="tab-plan" hidden>
+  <div class="tab" id="tab-ahorro" hidden>
   <section aria-labelledby="h-plan">
     <div class="sechead"><div><h2 id="h-plan">Plan de ahorro</h2><p>Con tu gasto medio real te digo qué recortar y cuánto para llegar a tu objetivo.</p></div></div>
     <div class="goal">
@@ -316,8 +349,12 @@ button,label,select,summary{touch-action:manipulation}
     <p class="msg" id="planCalcMsg" role="status"></p>
     <div id="planOut"></div>
   </section>
-  </div>
-  <div class="tab" id="tab-fixed" hidden>
+  <section aria-labelledby="h-save">
+    <div class="sechead"><div><h2 id="h-save">Ahorro o exceso por categoría</h2><p>% del presupuesto que te sobra (verde) o que te has pasado (rojo).</p></div></div>
+    <div class="axis" aria-hidden="true"><span></span><div><span>−100%</span><span>0</span><span>+100%</span></div><span></span></div>
+    <div class="div" id="div"></div>
+    <p class="verdict" id="verdict"></p>
+  </section>
   <section aria-labelledby="h-fixed">
     <div class="sechead"><div><h2 id="h-fixed">Gastos fijos</h2><p>Lo que pagas todos los meses y a dónde va. Al importar el CSV detecto solo los cargos que se repiten cada mes; el resto queda como histórico.</p></div></div>
     <div class="mix" id="fixedMix" hidden></div>
@@ -330,7 +367,7 @@ button,label,select,summary{touch-action:manipulation}
     <p class="msg" id="fixedMsg" role="status"></p>
   </section>
   </div>
-  <div class="tab" id="tab-import" hidden>
+  <div class="tab" id="tab-banco" hidden>
   <section aria-labelledby="h-import">
     <div class="sechead"><div><h2 id="h-import">Importar del banco</h2><p>Sube el extracto (CSV, Excel o PDF) o pega las filas copiadas de Excel. Te enseño cómo lo he leído antes de importar nada.</p></div></div>
     <label class="drop" id="drop" for="csvFile"><strong>Elegir archivo</strong><span>CSV, Excel o PDF · o arrástralo aquí</span></label>
@@ -382,7 +419,7 @@ window.addEventListener("error",e=>showErr("Error en la app: "+(e.message||"desc
 window.addEventListener("unhandledrejection",e=>showErr("Error: "+((e.reason&&e.reason.message)||e.reason||"desconocido")));
 /* clave para reconocer el mismo comercio aunque el banco añada números de tarjeta o fechas */
 const ckey=s=>norm(s).replace(/\(ejemplo\)/g,"").replace(/[0-9]+/g," ").replace(/[^a-záéíóúñü ]/gi," ").replace(/\b(compra|tarj|tarjeta|pago|en|recibo|adeudo|de|tpv|movil|móvil|bizum|transferencia|com)\b/g," ").replace(/\s+/g," ").trim();
-const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{}});
+const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0});
 
 let state={config:cfg({}),months:{}};
 let view=new Date(); view.setDate(1);
@@ -556,7 +593,12 @@ function render(){
     const s=spent[c.id]||0,b=+c.budget||0;
     const ratio=b>0?s/b:(s>0?1.01:0);
     const cls=ratio>1?"bad":(prog>0&&prog<1&&ratio>prog+0.05?"warn":"");
-    const el=document.createElement("div"); el.className="bar";
+    const el=document.createElement("div"); el.className="bar"+(editing?"":" pick");
+    if(!editing){
+      el.setAttribute("role","button"); el.tabIndex=0; el.setAttribute("aria-pressed",String(catFilter===c.id));
+      const pick=()=>{catFilter=catFilter===c.id?null:c.id; openId=null; render(); $("listSec").scrollIntoView({block:"start"})};
+      el.addEventListener("click",pick); el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick()}});
+    }
     const row=document.createElement("div"); row.className="row";
     const name=document.createElement("b"); name.textContent=c.name;
     row.appendChild(name);
@@ -596,27 +638,7 @@ function render(){
   const seen=new Set();
   Object.values(state.months).flat().forEach(i=>{const n=norm(i.concept);if(n&&!seen.has(n)){seen.add(n);const o=document.createElement("option");o.value=i.concept;dl.appendChild(o)}});
 
-  /* Lista del mes */
-  const list=$("list"); list.textContent="";
-  const its=items(k).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  $("count").textContent=its.length?its.length+" apuntes":"";
-  if(!its.length){const p=document.createElement("p");p.className="empty";p.textContent="Aún no hay gastos en "+mName+". Apunta el primero arriba.";list.appendChild(p)}
-  its.forEach(i=>{
-    const li=document.createElement("li");
-    const d=document.createElement("span"); d.className="day"; d.textContent=i.date.slice(8,10)+"/"+i.date.slice(5,7);
-    const w=document.createElement("div"); w.className="what";
-    const b=document.createElement("b"); b.textContent=i.concept||catById(i.cat).name;
-    const sm=document.createElement("small");
-    const sel=document.createElement("select"); sel.className="catsel"; sel.id="c-"+i.id; sel.setAttribute("aria-label","Categoría de "+(i.concept||"gasto"));
-    state.config.cats.forEach(c=>sel.appendChild(new Option(c.name,c.id)));
-    sel.value=i.cat; sel.onchange=()=>{i.cat=sel.value;saveMonth(k);render()};
-    sm.appendChild(sel);
-    if(i.fixed){const t=document.createElement("span");t.className="tag";t.textContent="fijo";sm.appendChild(t)}
-    w.append(b,sm);
-    const a=document.createElement("span"); a.className="num"; a.textContent=fmt(i.amount);
-    li.append(d,w,a,delButton(()=>{state.months[k]=items(k).filter(x=>x.id!==i.id);saveMonth(k);render()}));
-    list.appendChild(li);
-  });
+  renderList(k,mName);
 
   /* Ahorro divergente */
   const dv=$("div"); dv.textContent="";
@@ -701,6 +723,94 @@ function render(){
   $("applyFixed").textContent=pending.length?"Apuntar "+pending.length+" fijos en "+view.toLocaleDateString("es-ES",{month:"long"}):"Fijos de este mes apuntados";
 }
 
+/* ---------- Gastos del mes: ordenar, filtrar y editar ---------- */
+let sortMode="date", catFilter=null, openId=null, formOpen=false;
+try{sortMode=localStorage.getItem("mi-hucha-sort")||"date"}catch(e){}
+function setItemFixed(item,on){
+  const key=ckey(item.concept);
+  if(!key){ // sin concepto no se puede reconocer cada mes: solo este gasto
+    item.fixed=on; saveMonth(item.date.slice(0,7)); return;
+  }
+  if(on){
+    if(!state.config.fixed.some(f=>ckey(f.concept)===key))
+      state.config.fixed.push({id:uid(),concept:item.concept,amount:item.amount,cat:item.cat,day:+item.date.slice(8,10)||1,auto:false});
+    state.config.dismissed=state.config.dismissed.filter(d=>d!==key);
+  } else {
+    state.config.fixed=state.config.fixed.filter(f=>ckey(f.concept)!==key);
+    if(!state.config.dismissed.includes(key)) state.config.dismissed.push(key);
+  }
+  markFixed(key,on); saveConfig();
+}
+function setCategory(item,cat,all){
+  const key=ckey(item.concept);
+  if(all&&key){
+    Object.entries(state.months).forEach(([mk,list])=>{let ch=false;list.forEach(i=>{if(ckey(i.concept)===key&&i.cat!==cat){i.cat=cat;ch=true}});if(ch)saveMonth(mk)});
+  } else { item.cat=cat; saveMonth(item.date.slice(0,7)); }
+  const f=key&&state.config.fixed.find(x=>ckey(x.concept)===key);
+  if(f&&(all||true)){f.cat=cat; saveConfig();}
+}
+function renderList(k,mName){
+  document.querySelectorAll(".seg [data-sort]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.sort===sortMode)));
+  const chip=$("filterChip");
+  chip.hidden=!catFilter; if(catFilter) chip.textContent=catById(catFilter).name+"  ✕";
+  const list=$("list"); list.textContent="";
+  let its=items(k).slice();
+  if(catFilter) its=its.filter(i=>i.cat===catFilter);
+  const total=its.reduce((a,i)=>a+i.amount,0);
+  $("listInfo").textContent=its.length?its.length+" gastos · "+fmt(total)+(catFilter?" en "+catById(catFilter).name:""):"";
+  if(!its.length){list.appendChild(el("p","empty",catFilter?"No hay gastos de "+catById(catFilter).name+" en "+mName+".":"Aún no hay gastos en "+mName+". Apunta uno arriba o impórtalos en Banco."));return}
+  const byDate=(a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id);
+  if(sortMode==="amount") its.sort((a,b)=>b.amount-a.amount||byDate(a,b));
+  else its.sort(byDate);
+  const row=i=>{
+    const li=el("li","it");
+    const btn=el("button","rowbtn"); btn.type="button"; btn.setAttribute("aria-expanded",String(openId===i.id));
+    const w=el("span","what"); w.appendChild(el("b",null,i.concept||catById(i.cat).name));
+    const sm=el("small",null,catById(i.cat).name); if(i.fixed){const t=el("span","tag","fijo");sm.appendChild(t)} w.appendChild(sm);
+    btn.append(el("span","day",i.date.slice(8,10)+"/"+i.date.slice(5,7)),w,el("span","num",fmt(i.amount)),el("span","chev","›"));
+    btn.onclick=()=>{openId=openId===i.id?null:i.id;render()};
+    li.appendChild(btn);
+    if(openId===i.id){
+      const ed=el("div","rowedit");
+      const lab=el("label","f","Categoría"); const sel=el("select"); sel.id="ecat-"+i.id;
+      state.config.cats.forEach(c=>sel.appendChild(new Option(c.name,c.id))); sel.value=i.cat;
+      lab.appendChild(sel); ed.appendChild(lab);
+      const key=ckey(i.concept);
+      const same=key?Object.values(state.months).flat().filter(x=>x!==i&&ckey(x.concept)===key):[];
+      let allBox=null;
+      if(same.length){
+        const al=el("label","switch"); allBox=el("input"); allBox.type="checkbox"; allBox.id="eall-"+i.id; allBox.checked=true;
+        al.append(allBox,"Aplicar también a los otros "+same.length+" gastos de «"+(i.concept||"")+"»"); ed.appendChild(al);
+      }
+      sel.onchange=()=>{setCategory(i,sel.value,allBox&&allBox.checked);render()};
+      const fl=el("label","switch"); const fx=el("input"); fx.type="checkbox"; fx.id="efix-"+i.id; fx.checked=!!i.fixed;
+      fl.append(fx,"Es un gasto fijo"); ed.appendChild(fl);
+      fx.onchange=()=>{setItemFixed(i,fx.checked);render()};
+      ed.appendChild(el("p","hint",key?"Al marcarlo como fijo se aplica a todos los cargos de «"+i.concept+"» y aparece en Ahorro → Gastos fijos.":"Este gasto no tiene concepto: solo se marca este."));
+      const acts=el("div","acts");
+      acts.appendChild(delButton(()=>{state.months[k]=items(k).filter(x=>x.id!==i.id);openId=null;saveMonth(k);render()}));
+      const done=el("button","btn","Cerrar"); done.type="button"; done.onclick=()=>{openId=null;render()}; acts.appendChild(done);
+      ed.appendChild(acts); li.appendChild(ed);
+    }
+    return li;
+  };
+  if(sortMode==="cat"){
+    const groups=new Map(); its.forEach(i=>{if(!groups.has(i.cat))groups.set(i.cat,[]);groups.get(i.cat).push(i)});
+    [...groups.entries()].map(([c,l])=>[c,l,l.reduce((a,i)=>a+i.amount,0)]).sort((a,b)=>b[2]-a[2]).forEach(([c,l,t])=>{
+      const h=el("li","grp"); h.append(el("b",null,catById(c).name),el("span",null,l.length+" · "+fmt(t))); list.appendChild(h);
+      l.forEach(i=>list.appendChild(row(i)));
+    });
+  } else its.forEach(i=>list.appendChild(row(i)));
+}
+document.querySelectorAll(".seg [data-sort]").forEach(b=>b.addEventListener("click",()=>{sortMode=b.dataset.sort;try{localStorage.setItem("mi-hucha-sort",sortMode)}catch(e){};render()}));
+$("filterChip").addEventListener("click",()=>{catFilter=null;render()});
+$("addToggle").addEventListener("click",()=>{
+  formOpen=!formOpen; $("form").hidden=!formOpen;
+  $("addToggle").setAttribute("aria-expanded",String(formOpen));
+  $("addToggle").textContent=formOpen?"Cerrar":"+ Apuntar gasto";
+  if(formOpen) $("amount").focus();
+});
+
 function delButton(onDel,label){
   label=label||"Borrar";
   const b=document.createElement("button"); b.type="button"; b.className="del"; b.textContent=label;
@@ -737,7 +847,7 @@ $("form").addEventListener("submit",e=>{
   if(k!==monthKey(view)){view=new Date(+k.slice(0,4),+k.slice(5,7)-1,1)}
   msg.textContent="Apuntado: "+fmt(amount)+" en "+catById(selectedCat).name+".";
   $("amount").value=""; $("concept").value=""; $("isFixed").checked=false;
-  render(); $("amount").focus();
+  render();
 });
 $("applyFixed").onclick=()=>{
   const k=monthKey(view);
@@ -752,8 +862,8 @@ $("applyFixed").onclick=()=>{
   if(n){saveMonth(k);$("fixedMsg").textContent="Apuntados "+n+" gastos fijos.";render()}
 };
 $("editBudgets").onclick=()=>{editing=!editing;render()};
-$("prev").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);render()};
-$("next").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);render()};
+$("prev").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);openId=null;render()};
+$("next").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);openId=null;render()};
 $("importFile").addEventListener("change",e=>{
   const file=e.target.files[0]; if(!file) return;
   const r=new FileReader();
@@ -901,6 +1011,11 @@ $("calcPlan").addEventListener("click",()=>{
 
 /* ---------- Importar CSV del banco ---------- */
 const RULES=[
+  ["trans",/moeve|plenergy|petroprix|gavisa|^e\.?s\.?\s|e\.s\.|estacion de servicio|gasolinera|carburantes|easygas/],
+  ["super",/family cash|family castell|supermarket|carref|mercadona|consum|alcampo|carrefour|lidl|aldi|ahorramas|masymas|eroski/],
+  ["rest",/vend|vending|cafeteria|\bbar\b|restaurante|pizzeria|burger|kebab/],
+  ["subs",/microsoft|xbox|paddle|game ?pass|netflix|spotify|hbo|disney|icloud/],
+  ["ocio",/metaplatf|meta platforms|oculus|steam|epic games|g2a/],
   ["super",/mercadona|carrefour|lidl|aldi|dia\b|consum|eroski|alcampo|hipercor|supermerc|masymas|caprabo|bonpreu|ahorramas|froiz|gadis|spar|fruteria|carniceria|panaderia|horno/],
   ["rest",/restaur|\bbar\b|cafeter|burger|mcdonald|kfc|telepizza|domino|just ?eat|glovo|uber ?eats|deliveroo|pizzer|tapas|cerveceria|kebab|sushi|starbucks|100 montaditos|vips|foster/],
   ["trans",/repsol|cepsa|\bbp\b|galp|shell|gasolin|carburant|petrol|renfe|metro|\bemt\b|autobus|taxi|cabify|uber(?! ?eats)|parking|aparcam|peaje|autopista|itv|bicing|blablacar|ballenoil|plenoil/],
@@ -1160,7 +1275,7 @@ function previewCSV(){
       touched.forEach(saveMonth); saveConfig();
       const out=$("importOut"); out.textContent="";
       out.appendChild(el("p","msg","Importados "+r.exp.length+" gastos de "+touched.size+" meses. "+(found.length?"He pasado "+found.length+" gastos fijos a «Fijos»; el resto queda como histórico.":"No he encontrado cargos que se repitan cada mes; todo queda como histórico.")));
-      const go=el("button","btn go","Ver gastos fijos"); go.type="button"; go.onclick=()=>setTab("fixed"); out.appendChild(go);
+      const go=el("button","btn go","Ver gastos fijos"); go.type="button"; go.onclick=()=>{setTab("ahorro");const f=$("h-fixed");f&&f.scrollIntoView({block:"start"})}; out.appendChild(go);
       csv=null; render();
     }catch(e){
       btn.disabled=false; showErr("No se pudo importar: "+(e&&e.message||e));
@@ -1175,20 +1290,34 @@ const drop=$("drop");
 ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
 drop.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)readImportFile(f)});
 
+/* ---------- Reclasificar lo que está en «Otros» con las reglas nuevas ---------- */
+function recatOtros(){
+  let n=0;
+  Object.entries(state.months).forEach(([mk,list])=>{
+    let ch=false;
+    list.forEach(i=>{ if(i.cat!=="otros") return; const c=guessCat(i.concept,Object.create(null)); if(c!=="otros"){i.cat=c;ch=true;n++} });
+    if(ch) saveMonth(mk);
+  });
+  state.config.fixed.forEach(f=>{if(f.cat==="otros"){const c=guessCat(f.concept,Object.create(null)); if(c!=="otros") f.cat=c}});
+  return n;
+}
+if((state.config.recatV||0)<2){ const n=recatOtros(); state.config.recatV=2; saveConfig(); if(n) setTimeout(()=>syncMsg("He reclasificado "+n+" gastos que estaban en «Otros»."),400); }
+
 /* ---------- Pestañas ---------- */
-const TABS=["home","add","plan","fixed","import"];
+const TABS=["mes","ahorro","banco"];
 function setTab(t){
-  if(!TABS.includes(t)) t="home";
+  if(!TABS.includes(t)) t="mes";
   TABS.forEach(x=>{
     const pane=$("tab-"+x); if(pane) pane.hidden=x!==t;
     const b=document.querySelector('.tabbar [data-tab="'+x+'"]'); if(b) b.setAttribute("aria-current",x===t?"page":"false");
   });
   try{localStorage.setItem("mi-hucha-tab",t)}catch(e){}
+  if(typeof openId!=="undefined"&&openId){openId=null;render()}
   window.scrollTo(0,0);
 }
 document.querySelectorAll(".tabbar [data-tab]").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
 $("errClose").addEventListener("click",()=>{$("errBar").hidden=true});
-let startTab="home"; try{startTab=localStorage.getItem("mi-hucha-tab")||"home"}catch(e){}
+let startTab="mes"; try{startTab=localStorage.getItem("mi-hucha-tab")||"mes"}catch(e){}
 setTab(startTab);
 
 /* ---------- Frase del día: cambia cada vez que abres la app ---------- */
