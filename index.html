@@ -346,6 +346,13 @@ button,label,select,summary{touch-action:manipulation}
 .alert.bad::before{color:var(--bad)}
 .limin{display:inline-flex;align-items:center;gap:4px;font-family:var(--f-num);color:var(--muted)}
 .track.nolim{background:repeating-linear-gradient(90deg,var(--track) 0 2px,transparent 2px 10px);opacity:.5}
+
+/* Lista plegable */
+.listtoggle{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;background:none;border:0;padding:0;color:inherit;text-align:left;cursor:pointer;font:inherit}
+.listtoggle .sub{display:block;color:var(--muted);font-size:.85rem;margin-top:4px;font-family:var(--f-num)}
+.listtoggle .chev{font-size:1.3rem;color:var(--cyan);transition:transform .2s;flex:none}
+.listtoggle[aria-expanded="true"] .chev{transform:rotate(180deg)}
+.listbody{display:flex;flex-direction:column;gap:14px}
 </style>
 </head>
 <body>
@@ -392,7 +399,10 @@ button,label,select,summary{touch-action:manipulation}
     </form>
   </section>
   <section aria-labelledby="h-list" id="listSec">
-    <div class="sechead"><div><h2 id="h-list">Gastos del mes</h2><p id="listInfo"></p></div></div>
+    <button type="button" class="listtoggle" id="listToggle" aria-expanded="false" aria-controls="listBody">
+      <span><h2 id="h-list">Gastos del mes</h2><span class="sub" id="listInfo"></span></span><span class="chev" aria-hidden="true">▾</span>
+    </button>
+    <div id="listBody" class="listbody" hidden>
     <div class="toolbar">
       <div class="seg" role="group" aria-label="Ordenar por">
         <button type="button" data-sort="date">Fecha</button><button type="button" data-sort="amount">Importe</button><button type="button" data-sort="cat">Categoría</button>
@@ -400,6 +410,7 @@ button,label,select,summary{touch-action:manipulation}
       <button type="button" class="fchip" id="filterChip" hidden></button>
     </div>
     <ul class="glist" id="list"></ul>
+    </div>
   </section>
   <section aria-labelledby="h-bars">
     <div class="sechead">
@@ -718,7 +729,7 @@ function render(){
     const el=document.createElement("div"); el.className="bar"+(editing?"":" pick");
     if(!editing){
       el.setAttribute("role","button"); el.tabIndex=0; el.setAttribute("aria-pressed",String(catFilter===c.id));
-      const pick=()=>{catFilter=catFilter===c.id?null:c.id; openId=null; render(); $("listSec").scrollIntoView({block:"start"})};
+      const pick=()=>{catFilter=catFilter===c.id?null:c.id; openId=null; if(catFilter) setListOpen(true); render(); $("listSec").scrollIntoView({block:"start"})};
       el.addEventListener("click",pick); el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();pick()}});
     }
     const row=document.createElement("div"); row.className="row";
@@ -797,7 +808,9 @@ function render(){
 }
 
 /* ---------- Gastos del mes: ordenar, filtrar y editar ---------- */
-let sortMode="date", catFilter=null, openId=null, formOpen=false;
+let sortMode="date", catFilter=null, openId=null, formOpen=false, listOpen=false;
+try{listOpen=localStorage.getItem("mi-hucha-listopen")==="1"}catch(e){}
+function setListOpen(v){listOpen=v;try{localStorage.setItem("mi-hucha-listopen",v?"1":"0")}catch(e){}}
 try{sortMode=localStorage.getItem("mi-hucha-sort")||"date"}catch(e){}
 function setItemFixed(item,on){
   const key=ckey(item.concept);
@@ -823,6 +836,7 @@ function setCategory(item,cat,all){
   if(f&&(all||true)){f.cat=cat; saveConfig();}
 }
 function renderList(k,mName){
+  $("listBody").hidden=!listOpen; $("listToggle").setAttribute("aria-expanded",String(listOpen));
   document.querySelectorAll(".seg [data-sort]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.sort===sortMode)));
   const chip=$("filterChip");
   chip.hidden=!catFilter; if(catFilter) chip.textContent=catById(catFilter).name+"  ✕";
@@ -830,7 +844,7 @@ function renderList(k,mName){
   let its=items(k).slice();
   if(catFilter) its=its.filter(i=>i.cat===catFilter);
   const total=its.reduce((a,i)=>a+i.amount,0);
-  $("listInfo").textContent=its.length?its.length+" gastos · "+fmt(total)+(catFilter?" en "+catById(catFilter).name:""):"";
+  $("listInfo").textContent=its.length?its.length+" gastos · "+fmt(total)+(catFilter?" en "+catById(catFilter).name:""):"sin gastos este mes";
   if(!its.length){list.appendChild(el("p","empty",catFilter?"No hay gastos de "+catById(catFilter).name+" en "+mName+".":"Aún no hay gastos en "+mName+". Apunta uno arriba o impórtalos en Banco."));return}
   const byDate=(a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id);
   if(sortMode==="amount") its.sort((a,b)=>b.amount-a.amount||byDate(a,b));
@@ -891,6 +905,7 @@ function renderList(k,mName){
 }
 document.querySelectorAll(".seg [data-sort]").forEach(b=>b.addEventListener("click",()=>{sortMode=b.dataset.sort;try{localStorage.setItem("mi-hucha-sort",sortMode)}catch(e){};render()}));
 $("filterChip").addEventListener("click",()=>{catFilter=null;render()});
+$("listToggle").addEventListener("click",()=>{setListOpen(!listOpen);if(!listOpen){openId=null;catFilter=null}render()});
 $("addToggle").addEventListener("click",()=>{
   formOpen=!formOpen; $("form").hidden=!formOpen;
   $("addToggle").setAttribute("aria-expanded",String(formOpen));
