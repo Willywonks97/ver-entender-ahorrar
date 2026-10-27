@@ -1024,9 +1024,12 @@ const RULES=[
   ["ocio",/cine|yelmo|cinesa|kinepolis|teatro|concierto|entradas|ticketmaster|steam|playstation|xbox|nintendo|museo|viaje|booking|airbnb|ryanair|vueling|iberia|hotel|loteria|apuestas|bet365/],
   ["compras",/amazon|aliexpress|shein|zara|primark|h&m|\bhm\b|mango|pull|bershka|stradivarius|decathlon|el corte ingles|mediamarkt|fnac|pccomponentes|worten|druni|primor|sephora|farmacia|wallapop|temu/]
 ];
-function guessCat(concept,learned){
-  const k=ckey(concept); if(learned[k]) return learned[k];
+function guessCat(concept,learned,amount){
   const n=norm(concept);
+  // Comercios propios: OSUMAR (almuerzo) y la BP «VEHICLES SA» (menos de 15 € = bocata/café; más = gasolina)
+  if(/osumar/.test(n)) return "rest";
+  if(/vehicles sa|vehicules sa/.test(n)) return (+amount>0&&+amount<15)?"rest":"trans";
+  const k=ckey(concept); if(learned[k]) return learned[k];
   for(const [cat,re] of RULES) if(re.test(n)) return cat;
   return "otros";
 }
@@ -1235,7 +1238,7 @@ function computeImport(){
     if(income) inc[mk]=(inc[mk]||0)+income;
     if(expense){
       const concept=String(ci>=0&&r[ci]!=null?r[ci]:"").replace(/\s+/g," ").trim();
-      const it={id:uid(),amount:Math.round(expense*100)/100,cat:guessCat(concept,learned),concept,date,fixed:false};
+      const it={id:uid(),amount:Math.round(expense*100)/100,cat:guessCat(concept,learned,expense),concept,date,fixed:false};
       const base=it.date+"|"+it.amount.toFixed(2)+"|"+ckey(concept);
       // lo ya guardado se descarta; dos cargos idénticos dentro del mismo archivo se respetan
       if(existing.has(base)){dup++;return}
@@ -1295,13 +1298,13 @@ function recatOtros(){
   let n=0;
   Object.entries(state.months).forEach(([mk,list])=>{
     let ch=false;
-    list.forEach(i=>{ if(i.cat!=="otros") return; const c=guessCat(i.concept,Object.create(null)); if(c!=="otros"){i.cat=c;ch=true;n++} });
+    list.forEach(i=>{ if(i.cat!=="otros") return; const c=guessCat(i.concept,Object.create(null),i.amount); if(c!=="otros"){i.cat=c;ch=true;n++} });
     if(ch) saveMonth(mk);
   });
-  state.config.fixed.forEach(f=>{if(f.cat==="otros"){const c=guessCat(f.concept,Object.create(null)); if(c!=="otros") f.cat=c}});
+  state.config.fixed.forEach(f=>{if(f.cat==="otros"){const c=guessCat(f.concept,Object.create(null),f.amount); if(c!=="otros") f.cat=c}});
   return n;
 }
-if((state.config.recatV||0)<2){ const n=recatOtros(); state.config.recatV=2; saveConfig(); if(n) setTimeout(()=>syncMsg("He reclasificado "+n+" gastos que estaban en «Otros»."),400); }
+if((state.config.recatV||0)<3){ const n=recatOtros(); state.config.recatV=3; saveConfig(); if(n) setTimeout(()=>syncMsg("He reclasificado "+n+" gastos que estaban en «Otros»."),400); }
 
 /* ---------- Pestañas ---------- */
 const TABS=["mes","ahorro","banco"];
