@@ -337,6 +337,15 @@ button,label,select,summary{touch-action:manipulation}
 .tips li::before{content:counter(t);font-family:var(--f-num);font-weight:700;color:#000;background:var(--magenta);width:22px;height:22px;display:grid;place-items:center;font-size:.75rem}
 .tips li b{font-family:var(--f-num);color:var(--ok);white-space:nowrap}
 .tips li span{grid-column:2}
+
+/* Límites y avisos */
+.alerts{display:flex;flex-direction:column;gap:6px}
+.alert{margin:0;padding:9px 12px;font-size:.88rem;border:1px solid var(--warn);border-left:4px solid var(--warn);background:rgba(252,238,10,.07)}
+.alert.bad{border-color:var(--bad);background:rgba(255,59,92,.1)}
+.alert::before{content:"⚠ ";color:var(--warn)}
+.alert.bad::before{color:var(--bad)}
+.limin{display:inline-flex;align-items:center;gap:4px;font-family:var(--f-num);color:var(--muted)}
+.track.nolim{background:repeating-linear-gradient(90deg,var(--track) 0 2px,transparent 2px 10px);opacity:.5}
 </style>
 </head>
 <body>
@@ -364,6 +373,7 @@ button,label,select,summary{touch-action:manipulation}
   <div class="tab" id="tab-mes">
   <p class="quote" id="quote" aria-live="polite"><span class="qtag">MSG://</span> <span id="quoteText"></span></p>
   <section aria-labelledby="h-add" class="addsec">
+    <div class="alerts" id="alerts" role="status" hidden></div>
     <button class="primary" id="addToggle" type="button" aria-expanded="false" aria-controls="form">+ Apuntar gasto</button>
     <h2 id="h-add" class="sr">Apuntar gasto</h2>
     <form id="form" novalidate hidden>
@@ -393,8 +403,8 @@ button,label,select,summary{touch-action:manipulation}
   </section>
   <section aria-labelledby="h-bars">
     <div class="sechead">
-      <div><h2 id="h-bars">Presupuesto por categoría</h2><p>Toca una categoría para ver solo sus gastos.</p></div>
-      <button class="link" id="editBudgets" type="button">Editar presupuestos</button>
+      <div><h2 id="h-bars">Mis límites del mes</h2><p>Lo máximo que quieres gastar en cada cosa. Te aviso arriba cuando te acerques. Toca una para ver sus gastos.</p></div>
+      <button class="link" id="editBudgets" type="button">Poner límites</button>
     </div>
     <div class="bars" id="bars"></div>
     <div class="legend" id="legend">
@@ -492,7 +502,7 @@ window.addEventListener("error",e=>showErr("Error en la app: "+(e.message||"desc
 window.addEventListener("unhandledrejection",e=>showErr("Error: "+((e.reason&&e.reason.message)||e.reason||"desconocido")));
 /* clave para reconocer el mismo comercio aunque el banco añada números de tarjeta o fechas */
 const ckey=s=>norm(s).replace(/\(ejemplo\)/g,"").replace(/[0-9]+/g," ").replace(/[^a-záéíóúñü ]/gi," ").replace(/\b(compra|tarj|tarjeta|pago|en|recibo|adeudo|de|tpv|movil|móvil|bizum|transferencia|com)\b/g," ").replace(/\s+/g," ").trim();
-const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0});
+const cfg=c=>({cats:c.cats||DEFAULT_CATS.map(x=>({...x})),fixed:c.fixed||[],dismissed:c.dismissed||[],income:c.income||0,goal:c.goal||0,incomeHist:c.incomeHist||{},recatV:c.recatV||0,limV:c.limV||0,recHidden:c.recHidden||[],recReview:c.recReview||{},countMoves:!!c.countMoves});
 
 let state={config:cfg({}),months:{}};
 let view=new Date(); view.setDate(1);
@@ -647,13 +657,14 @@ function render(){
   const incomeNow=state.config.income||0, goalNow=state.config.goal||0;
   const usePlan=incomeNow>0&&goalNow>0;
   const avail=usePlan?incomeNow-goalNow:totalBudget;
-  const left=avail-totalSpent;
+  const spentLimited=cats.filter(c=>+c.budget>0).reduce((a,c)=>a+(spent[c.id]||0),0);
+  const left=usePlan?avail-totalSpent:avail-spentLimited;
   const prog=monthProgress();
   $("sumSpent").textContent=fmt(totalSpent);
-  $("sumOf").textContent="de "+fmt(avail)+(usePlan?" para gastar":" presupuestados");
+  $("sumOf").textContent=usePlan?"de "+fmt(avail)+" para gastar":(totalBudget?"en tus límites: "+fmt(spentLimited)+" de "+fmt(totalBudget):"este mes");
   $("sumLeft").textContent=fmt(Math.abs(left));
   $("sumLeft").classList.toggle("neg",left<0);
-  $("leftLabel").textContent=left<0?"Te has pasado":(usePlan?"Te queda sin tocar tu ahorro":"Te queda");
+  $("leftLabel").textContent=left<0?(usePlan?"Te has pasado":"Te has pasado de tus límites"):(usePlan?"Te queda sin tocar tu ahorro":"Te queda en tus límites");
   if(prog>0&&prog<1&&left>0){
     const days=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
     const rem=days-new Date().getDate()+1;
@@ -689,12 +700,21 @@ function render(){
     }
   }
 
-  /* Barras */
+  /* Mis límites: barras + avisos */
   const bars=$("bars"); bars.textContent="";
-  cats.forEach(c=>{
+  const alerts=[];
+  const ordered=editing?cats:cats.slice().sort((x,y)=>((+y.budget>0)-(+x.budget>0))||((spent[y.id]||0)-(spent[x.id]||0)));
+  ordered.forEach(c=>{
     const s=spent[c.id]||0,b=+c.budget||0;
-    const ratio=b>0?s/b:(s>0?1.01:0);
-    const cls=ratio>1?"bad":(prog>0&&prog<1&&ratio>prog+0.05?"warn":"");
+    if(!editing&&!b&&!s) return; // sin límite y sin gasto: no estorba
+    const ratio=b>0?s/b:0;
+    const fast=prog>0&&prog<1&&ratio>=0.5&&ratio>prog+0.15;
+    const cls=b?(ratio>=1?"bad":(ratio>=0.8||fast?"warn":"")):"none";
+    if(b&&!editing){
+      if(ratio>=1) alerts.push(["bad",c.name+": te has pasado "+fmt(s-b)+" ("+fmt(s)+" de "+fmt(b)+")"]);
+      else if(ratio>=0.8) alerts.push(["warn",c.name+": llevas "+fmt(s)+" de "+fmt(b)+", te quedan "+fmt(b-s)]);
+      else if(fast) alerts.push(["warn",c.name+": vas rápido, llevas el "+Math.round(ratio*100)+"% del límite y va el "+Math.round(prog*100)+"% del mes"]);
+    }
     const el=document.createElement("div"); el.className="bar"+(editing?"":" pick");
     if(!editing){
       el.setAttribute("role","button"); el.tabIndex=0; el.setAttribute("aria-pressed",String(catFilter===c.id));
@@ -705,22 +725,28 @@ function render(){
     const name=document.createElement("b"); name.textContent=c.name;
     row.appendChild(name);
     if(editing){
-      const inp=document.createElement("input"); inp.type="text"; inp.inputMode="decimal"; inp.id="bud-"+c.id;
-      inp.value=String(b).replace(".",","); inp.setAttribute("aria-label","Presupuesto de "+c.name);
-      inp.addEventListener("change",()=>{const v=parseFloat(inp.value.replace(",","."));c.budget=isFinite(v)&&v>=0?v:0;saveConfig();render()});
-      row.appendChild(inp);
+      const wrap=document.createElement("span"); wrap.className="limin";
+      const inp=document.createElement("input"); inp.type="text"; inp.inputMode="decimal"; inp.id="bud-"+c.id; inp.placeholder="sin límite";
+      inp.value=b?String(b).replace(".",","):""; inp.setAttribute("aria-label","Límite de "+c.name);
+      inp.addEventListener("change",()=>{const v=num(inp.value);c.budget=v>0?v:0;saveConfig();render()});
+      wrap.append(inp," €"); row.appendChild(wrap);
     } else {
       const n=document.createElement("span"); n.className="num";
       const st=document.createElement("strong"); st.textContent=fmt(s);
-      n.appendChild(st); n.append(" / "+fmt(b)); row.appendChild(n);
+      n.appendChild(st); n.append(b?" / "+fmt(b):" · sin límite"); row.appendChild(n);
     }
     const tr=document.createElement("div"); tr.className="track";
-    const f=document.createElement("div"); f.className="fill "+cls; f.style.width=Math.min(ratio,1)*100+"%";
-    tr.appendChild(f);
-    if(prog>0&&prog<1){const p=document.createElement("div");p.className="pace";p.style.left="calc("+(prog*100)+"% - 1px)";tr.appendChild(p)}
+    if(b){
+      const f=document.createElement("div"); f.className="fill "+cls; f.style.width=Math.min(ratio,1)*100+"%";
+      tr.appendChild(f);
+      if(prog>0&&prog<1){const p=document.createElement("div");p.className="pace";p.style.left="calc("+(prog*100)+"% - 1px)";tr.appendChild(p)}
+    } else tr.classList.add("nolim");
     el.append(row,tr); bars.appendChild(el);
   });
-  $("editBudgets").textContent=editing?"Listo":"Editar presupuestos";
+  if(!bars.childElementCount) bars.appendChild(Object.assign(document.createElement("p"),{className:"empty",textContent:"Aún no has puesto límites. Pulsa «Poner límites» y escribe cuánto quieres gastar como máximo en cada cosa."}));
+  $("editBudgets").textContent=editing?"Listo":"Poner límites";
+  const al=$("alerts"); al.textContent=""; al.hidden=!alerts.length;
+  alerts.sort((x,y)=>(y[0]==="bad")-(x[0]==="bad")).forEach(([lv,t])=>{const d=document.createElement("p");d.className="alert "+lv;d.textContent=t;al.appendChild(d)});
 
   /* Chips de categoría */
   const chips=$("catChips");
@@ -1021,14 +1047,30 @@ function detectRecurring(all){
         const last=best[best.length-1], since=END-dayNum(last.date);
         const names=new Map(); best.forEach(i=>{const n=String(i.concept).replace(/\s+/g," ").trim();names.set(n,(names.get(n)||0)+1)});
         const label=[...names.entries()].sort((a,b)=>b[1]-a[1])[0][0];
-        out.push({key:root+"|"+last.amount.toFixed(2)+"|"+best[0].date,root,name:label,freq:name,per,
+        out.push({key:root+"|"+avg.toFixed(0)+"|"+name,root,name:label,freq:name,per,
           amount:last.amount,avg,count:best.length,first:best[0].date,last:last.date,cat:last.cat,
           yearly:avg*365/per,monthly:avg*30.44/per,active:since<=per*1.5+6,items:best});
        }
       });
     });
   });
-  return out.sort((a,b)=>(b.active-a.active)||(b.yearly-a.yearly));
+  // Limpieza: una misma suscripción no puede salir dos veces
+  //  · si dos series del mismo comercio y mismo precio se solapan en el tiempo, la corta son compras sueltas: fuera
+  //  · si no se solapan, es la misma suscripción con una pausa: se juntan en una
+  const kept=[];
+  out.sort((a,b)=>b.count-a.count).forEach(r=>{
+    const twin=kept.find(k=>k.root===r.root&&k.freq===r.freq&&Math.abs(k.avg-r.avg)<=k.avg*0.03);
+    if(!twin){kept.push(r);return}
+    const overlap=r.first<=twin.last&&r.last>=twin.first;
+    if(overlap) return;
+    twin.items=twin.items.concat(r.items).sort((a,b)=>a.date.localeCompare(b.date));
+    twin.count=twin.items.length; twin.first=twin.items[0].date;
+    const last=twin.items[twin.items.length-1];
+    twin.last=last.date; twin.amount=last.amount; twin.name=String(last.concept).replace(/\s+/g," ").trim(); twin.cat=last.cat;
+    twin.active=twin.active||r.active; twin.paused=true;
+    twin.key=twin.root+"|"+twin.avg.toFixed(0)+"|"+twin.freq;
+  });
+  return kept.sort((a,b)=>(b.active-a.active)||(b.yearly-a.yearly));
 }
 
 /* ---------- Plan de ahorro (como un asesor) ---------- */
@@ -1039,6 +1081,10 @@ const MOVE=/revolut|traspaso|transf|reint|cajero|bizum/i;
 const median=a=>{if(!a.length)return 0;const s=a.slice().sort((x,y)=>x-y),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 const allItems=()=>Object.values(state.months).flat();
+function manualFixed(){
+  const seen=new Set();
+  return state.config.fixed.filter(f=>{const k=ckey(f.concept); if(seen.has(k)) return false; seen.add(k); return true}).filter(f=>!f.auto&&!REC.some(r=>r.active&&r.root===merchantRoot(f.concept)&&Math.abs(r.avg-(+f.amount||0))<=Math.max(1,r.avg*0.15)));
+}
 let REC=[], REC_IDS=new Set();
 function refreshRecurring(){
   const hidden=new Set(state.config.recHidden||[]);
@@ -1070,7 +1116,7 @@ function planNumbers(){
   });
   const catMed=Object.create(null); Object.keys(catMonths).forEach(c=>catMed[c]=median(catMonths[c]));
   const activeRec=REC.filter(r=>r.active);
-  const manual=state.config.fixed.filter(f=>!f.auto);
+  const manual=manualFixed();
   const recMonthly=activeRec.reduce((a,r)=>a+r.monthly,0)+manual.reduce((a,f)=>a+(+f.amount||0),0);
   const recByCat=Object.create(null);
   activeRec.forEach(r=>recByCat[r.cat]=(recByCat[r.cat]||0)+r.monthly);
@@ -1221,7 +1267,7 @@ const FREQ_TXT={mensual:"al mes",semanal:"a la semana",quincenal:"cada 15 días"
 const mname=d=>new Date(+d.slice(0,4),+d.slice(5,7)-1,1).toLocaleDateString("es-ES",{month:"short",year:"2-digit"});
 function renderRecurring(){
   const act=REC.filter(r=>r.active), old=REC.filter(r=>!r.active);
-  const manual=state.config.fixed.filter(f=>!f.auto);
+  const manual=manualFixed();
   const tot=act.reduce((a,r)=>a+r.monthly,0)+manual.reduce((a,f)=>a+(+f.amount||0),0);
   const micro=act.filter(r=>r.amount<15);
   const sum=$("recSum"); sum.textContent="";
@@ -1236,7 +1282,7 @@ function renderRecurring(){
     const li=el("li","rec"+(rev[r.key]==="cancel"?" cancel":""));
     const top=el("div","rtop");
     const w=el("div","what"); w.appendChild(el("b",null,r.name));
-    w.appendChild(el("small",null,catById(r.cat).name+" · "+r.count+" cobros · "+mname(r.first)+" → "+mname(r.last)+(r.amount<15?" · micropago":"")));
+    w.appendChild(el("small",null,catById(r.cat).name+" · "+r.count+" cobros · "+mname(r.first)+" → "+mname(r.last)+(r.amount<15?" · micropago":"")+(r.paused?" · con pausas":"")));
     const a=el("div","ramt"); a.append(el("b",null,fmt(r.amount)),el("small",null,FREQ_TXT[r.freq]||r.freq));
     top.append(w,a); li.appendChild(top);
     const bot=el("div","rbot");
@@ -1569,6 +1615,15 @@ function recatOtros(){
   });
   state.config.fixed.forEach(f=>{if(f.cat==="otros"){const c=guessCat(f.concept,Object.create(null),f.amount); if(c!=="otros") f.cat=c}});
   return n;
+}
+if((state.config.limV||0)<1){
+  const by=id=>state.config.cats.find(c=>c.id===id);
+  const untouched=by("trans")&&+by("trans").budget===80&&by("ocio")&&+by("ocio").budget===60&&by("rest")&&+by("rest").budget===100;
+  if(untouched){
+    const mine={trans:200,tabaco:100,rest:150,ocio:100};
+    state.config.cats.forEach(c=>{c.budget=mine[c.id]||0});
+  }
+  state.config.limV=1; saveConfig();
 }
 if((state.config.recatV||0)<4){
   // categorías nuevas
