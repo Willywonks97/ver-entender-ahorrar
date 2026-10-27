@@ -333,7 +333,7 @@ button,label,select,summary{touch-action:manipulation}
       </div>
     </div>
     <div class="summary">
-      <div><span class="label">Gastado</span><span class="big" id="sumSpent">0 €</span><span class="label" id="sumOf"></span></div>
+      <div><span class="label" id="lblSpent">Gastado</span><span class="big" id="sumSpent">0 €</span><span class="label" id="sumOf"></span></div>
       <div><span class="label" id="leftLabel">Te queda</span><span class="big left" id="sumLeft">0 €</span><span class="label" id="sumDaily"></span></div>
     </div>
     <p class="note" id="syncNote">Guardando en este dispositivo.</p>
@@ -634,6 +634,34 @@ function render(){
     const hasSpent=totalSpent>0;
     $("sumDaily").textContent=hasSpent?fmt(left/rem)+" al día · quedan "+rem+(rem===1?" día":" días"):fmt(avail/days)+" al día de media";
   } else $("sumDaily").textContent=prog>=1?"mes cerrado":"";
+  // Con meta de ahorro: cuánto puedes gastar al día para cumplirla
+  const DP=dailyPlan();
+  $("lblSpent").textContent=DP?"Para tu meta":"Gastado";
+  if(DP){
+    const dim=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
+    const diaSpent=items(k).filter(i=>kindOf(i)==="dia").reduce((a,i)=>a+i.amount,0);
+    const monthAllowed=DP.perDay*dim, leftM=monthAllowed-diaSpent;
+    $("sumSpent").textContent=fmt(DP.perDay);
+    $("sumOf").textContent="al día · ahorrando "+fmt(DP.goal)+"/mes";
+    if(prog>0&&prog<1){
+      const rem=dim-new Date().getDate()+1;
+      $("leftLabel").textContent=leftM>=0?"Hoy puedes gastar":"Este mes te has pasado";
+      $("sumLeft").textContent=fmt(leftM>=0?leftM/rem:-leftM);
+      $("sumLeft").classList.toggle("neg",leftM<0);
+      $("sumDaily").textContent="llevas "+fmt(diaSpent)+" de "+fmt(monthAllowed)+" en el día a día";
+    } else if(prog>=1){
+      const avg=diaSpent/dim;
+      $("leftLabel").textContent="Gastaste al día";
+      $("sumLeft").textContent=fmt(avg);
+      $("sumLeft").classList.toggle("neg",avg>DP.perDay);
+      $("sumDaily").textContent=avg<=DP.perDay?"dentro de tu meta":"por encima de tu meta";
+    } else {
+      $("leftLabel").textContent="Podrás gastar";
+      $("sumLeft").textContent=fmt(monthAllowed);
+      $("sumLeft").classList.remove("neg");
+      $("sumDaily").textContent="en el día a día este mes";
+    }
+  }
 
   /* Barras */
   const bars=$("bars"); bars.textContent="";
@@ -1024,6 +1052,13 @@ function planNumbers(){
   const ih=state.config.incomeHist||{};
   const incomeAuto=median(ks.map(k=>ih[k]||0).filter(v=>v>0));
   return {ks,n,diaMonthly:median(dia),movMonthly:median(mov),extraMonthly:n?extras.reduce((a,i)=>a+i.amount,0)/n:0,extras,catMed,recMonthly,recByCat,activeRec,incomeAuto};
+}
+function dailyPlan(){
+  const goal=state.config.goal||0; if(!goal) return null;
+  const P=planNumbers(); if(!P.n) return null;
+  const income=state.config.income||P.incomeAuto;
+  const allowed=income-goal-P.recMonthly-P.extraMonthly-(state.config.countMoves?P.movMonthly:0);
+  return allowed>0?{perDay:allowed/30.44,goal,allowed}:null;
 }
 function ledgerRow(label,value,cls,note){
   const r=el("div","lrow"+(cls?" "+cls:""));
