@@ -190,6 +190,17 @@ textarea.paste{width:100%;min-height:80px;border:1px solid var(--line);border-ra
 .trow small{color:var(--muted);font-size:.76rem}
 
 /* navegación inferior */
+/* plegables con título */
+details.fold>summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+details.fold>summary::before{content:"";width:9px;height:9px;border-right:2px solid var(--cyan);border-bottom:2px solid var(--cyan);transform:rotate(-45deg);transition:transform .15s;flex:none}
+details.fold[open]>summary::before{content:"";transform:rotate(45deg)}
+details.fold>summary .label{margin-left:auto}
+/* botes */
+.bote{display:grid;grid-template-columns:10px minmax(0,1fr) 64px auto;gap:10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.bote:first-child{border-top:0}
+.bote input{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:7px 8px;min-width:0;width:100%}
+.bote .pct{display:flex;align-items:center;gap:3px}.bote .pct input{text-align:right;font-family:var(--f-num)}
+.bote b{font-family:var(--f-num);font-size:1.05rem;text-align:right;white-space:nowrap}
 /* Total */
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
 .chart text{font-family:var(--f-num);font-size:9px;fill:var(--muted)}
@@ -269,11 +280,20 @@ textarea.paste{width:100%;min-height:80px;border:1px solid var(--line);border-ra
       <div id="planOut" class="wrap" style="gap:12px"></div>
     </section>
 
+    <section class="card" id="botesCard">
+      <div class="cardhead"><h2>Tus botes</h2><span class="label" id="botesInc"></span></div>
+      <p class="note">Cuando cobres, reparte tu nómina así. Puedes cambiar los nombres y los porcentajes.</p>
+      <div id="botesList"></div>
+      <p class="note" id="botesMsg"></p>
+    </section>
+
     <section class="card" id="limCard">
-      <div class="cardhead"><h2>Límites por categoría</h2></div>
+      <details id="limDet" class="fold"><summary><h2>Límites por categoría</h2><span class="label" id="limHint"></span></summary>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
       <p class="note">Lo máximo que quieres gastar en cada cosa al mes. Te aviso en «Hoy» cuando te acerques.</p>
       <div id="limSum"></div>
       <div id="limList"></div>
+      </div></details>
     </section>
 
     <section class="card" id="fixCard">
@@ -657,7 +677,7 @@ function cfg(c){c=c||{};return{
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
   countMoves:!!c.countMoves,triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
-  cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
+  botes:Array.isArray(c.botes)&&c.botes.length?c.botes:[{n:"Gastos",p:50},{n:"Ahorro",p:25},{n:"Caprichos",p:15},{n:"Imprevistos",p:10}],cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
   state={config:cfg({}),months:{}};
@@ -822,7 +842,7 @@ function renderHoy(){
     const box=el("div","alert"+(over.length?" bad":"")); box.style.cssText="display:flex;flex-direction:column;gap:4px";
     box.appendChild(el("b",null,over.length?"Límites superados este mes":"Cerca de tus límites"));
     over.concat(near).forEach(([c,t])=>{const r=el("div","row2");const n=el("span");const d=el("span","dot");d.style.cssText="display:inline-block;margin-right:6px;background:"+catColor(c.id);n.append(d,c.name);r.append(n,el("span","num",t));box.appendChild(r)});
-    const lk=el("button","link","Ver mis límites");lk.type="button";lk.onclick=()=>{setTab("plan");setTimeout(()=>$("limCard").scrollIntoView({block:"start"}),50)};box.appendChild(lk);
+    const lk=el("button","link","Ver mis límites");lk.type="button";lk.onclick=()=>{setTab("plan");$("limDet").open=true;setTimeout(()=>$("limCard").scrollIntoView({block:"start"}),50)};box.appendChild(lk);
     al.appendChild(box);
   }
   // últimos
@@ -1064,6 +1084,8 @@ $("income").addEventListener("input",planInput); $("goal").addEventListener("inp
 function renderLimits(){
   const P=PLAN, k=monthKey(new Date()), sp=catSpent(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0);
   const ls=$("limSum"); ls.textContent="";
+  const over=cats().filter(c=>+c.budget&&(sp[c.id]||0)>=+c.budget).length, hint=$("limHint");
+  hint.textContent=over?over+" superado"+(over>1?"s":""):(sum?fmt(sum)+"/mes":""); hint.style.color=over?"var(--red)":"";
   const cap=Math.max(0,P.allowed)+P.fixedMonthly;
   const line=el("p","sumline"); ls.appendChild(line);
   if(P.configured&&sum>cap+5){line.classList.add("bad");line.textContent="Tus límites suman "+fmt(sum)+", pero tu plan solo te deja "+fmt(cap)+" (día a día + fijos). No cuadran."}
@@ -1253,6 +1275,29 @@ function preview(){
 $("csvFile").addEventListener("change",e=>{const f=e.target.files[0];if(f)readImportFile(f);e.target.value=""});
 $("pasteGo").onclick=()=>{const t=$("pasteText").value;if(!t.trim()){importError("Pega primero el texto copiado de Excel.");return}setupCSV(t,"el texto pegado")};
 
+/* ================= BOTES (reparto de la nómina) ================= */
+const BOTE_COL=["#16F2E5","#3DFFA8","#FF2BD6","#FCEE0A","#9B5CFF","#FF8A3D"];
+function renderBotes(){
+  const C=state.config, inc=C.income||0, L=$("botesList"); L.textContent="";
+  $("botesInc").textContent=inc?"de "+fmt(inc):"";
+  C.botes.forEach((b,i)=>{
+    const r=el("div","bote"),d=el("span","dot");d.style.background=BOTE_COL[i%BOTE_COL.length];
+    const n=el("input");n.value=b.n;n.setAttribute("aria-label","Nombre del bote");n.onchange=()=>{b.n=n.value.trim()||b.n;save()};
+    const pw=el("label","pct"),p=el("input");p.inputMode="decimal";p.value=String(b.p).replace(".",",");p.setAttribute("aria-label","Porcentaje de "+b.n);pw.append(p,el("span","muted","%"));
+    const v=el("b",null,inc?fmt(inc*b.p/100):"—");
+    p.oninput=()=>{b.p=Math.max(0,num(p.value));v.textContent=inc?fmt(inc*b.p/100):"—";msg()};p.onchange=()=>{save();renderBotes()};
+    r.append(d,n,pw,v);L.appendChild(r);
+  });
+  function msg(){
+    const m=$("botesMsg"),t=C.botes.reduce((a,b)=>a+(+b.p||0),0);m.textContent="";m.style.color="";
+    if(!inc){m.textContent="Pon en «Tu plan» cuánto cobras y te digo cuánto va a cada bote.";return}
+    if(Math.abs(t-100)>0.01){m.style.color="var(--yellow)";m.textContent="Los porcentajes suman "+String(Math.round(t*10)/10).replace(".",",")+" %: deberían sumar 100 %.";return}
+    const gastos=C.botes[0]?inc*C.botes[0].p/100:0, aparte=inc-gastos;
+    m.append("Cada mes apartas ");m.appendChild(el("b",null,fmt(aparte)));m.append(" en los botes y te quedan ");m.appendChild(el("b",null,fmt(gastos)));m.append(" para «"+(C.botes[0]?C.botes[0].n:"")+"» (incluidos los fijos).");
+  }
+  msg();
+}
+
 /* ================= HUCHA: lo que ahorras cada mes, sin tocar el banco ================= */
 const parseISO=s=>new Date(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10));
 const MES=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
@@ -1364,7 +1409,7 @@ function renderHist(){
 }
 
 /* ================= Arranque ================= */
-function renderAll(){computeFixed();PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderLimits();renderFixed();renderSettings()}
+function renderAll(){computeFixed();PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderBotes();renderLimits();renderFixed();renderSettings()}
 $("errClose").onclick=()=>$("errBar").hidden=true;
 (function quote(){let i;try{const l=parseInt(localStorage.getItem("mi-hucha-quote"),10);i=isFinite(l)?(l+1)%QUOTES.length:0;localStorage.setItem("mi-hucha-quote",String(i))}catch(e){i=Math.floor(Math.random()*QUOTES.length)}$("quote").textContent=QUOTES[i]})();
 load(); migrate();
