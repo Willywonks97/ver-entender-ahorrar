@@ -1216,11 +1216,14 @@ function computeImport(){
   if(di<0) return{err:"Elige cuál es la columna de la Fecha."};
   if(ai<0&&bi<0&&ki<0) return{err:"Elige cuál es la columna del Importe."};
   const learned=Object.create(null),existing=new Set();
-  allItems().forEach(i=>{const k=ckey(i.concept);if(k&&!i.splitOf)learned[k]=i.cat;existing.add(i.date+"|"+Number(i.origAmount??i.amount).toFixed(2)+"|"+k)});
+  const pool=[];
+  allItems().forEach(i=>{const k=ckey(i.concept),a=Number(i.origAmount??i.amount);if(k&&!i.splitOf)learned[k]=i.cat;existing.add(i.date+"|"+a.toFixed(2)+"|"+k);
+    if(i.bank)existing.add(i.bankDate+"|"+a.toFixed(2)+"|"+ckey(i.bank));
+    else if(i.created&&!i.splitOf)pool.push(i)}); // apuntados a mano que el banco aún no ha traído
   const rows=csv.rows.filter(r=>parseDate(r[di]));
   let pos=csv.sign==="pos";
   if(csv.sign==="auto"){const v=ai>=0&&bi<0&&ki<0?rows.map(r=>parseMoney(r[ai])).filter(isFinite):[];pos=v.length>0&&!v.some(x=>x<0)}
-  const exp=[],inc=Object.create(null);let dup=0;
+  const exp=[],inc=Object.create(null),links=[];let dup=0;
   rows.forEach(r=>{
     const date=parseDate(r[di]);let e=0,g=0;
     if(bi>=0||ki>=0){const d=bi>=0?parseMoney(r[bi]):NaN,k=ki>=0?parseMoney(r[ki]):NaN;if(isFinite(d)&&d!==0)e=Math.abs(d);if(isFinite(k)&&k>0)g=k}
@@ -1230,17 +1233,20 @@ function computeImport(){
       const it={id:uid(),amount:Math.round(e*100)/100,cat:guessCat(concept,learned,e),concept,date};
       if(!cats().some(c=>c.id===it.cat)) it.cat="otros";
       if(existing.has(it.date+"|"+it.amount.toFixed(2)+"|"+ckey(concept))){dup++;return}
+      // el mismo gasto que ya apuntaste a mano (mismo importe, hasta 3 días de diferencia): no se duplica
+      const m=pool.find(i=>Math.abs(Number(i.origAmount??i.amount)-it.amount)<0.005&&Math.abs(dayNum(i.date)-dayNum(date))<=3);
+      if(m){pool.splice(pool.indexOf(m),1);links.push([m,concept,date]);return}
       exp.push(it)}
   });
   exp.sort((a,b)=>a.date.localeCompare(b.date));
-  return{exp,inc,dup};
+  return{exp,inc,dup,links};
 }
 function preview(){
   const box=$("impPrev"); box.textContent=""; const r=computeImport();
   if(r.err){box.appendChild(el("p","msg err",r.err));return}
-  box.appendChild(el("p","note",r.exp.length+" gastos nuevos"+(r.exp.length?" ("+fmtDay(r.exp[0].date)+" → "+fmtDay(r.exp[r.exp.length-1].date)+")":"")+(r.dup?" · "+r.dup+" ya los tenías":"")));
-  const b=el("button","save","Importar "+r.exp.length+" gastos"); b.type="button"; b.disabled=!r.exp.length&&!Object.keys(r.inc).length;
-  b.onclick=()=>{try{r.exp.forEach(addItem);Object.entries(r.inc).forEach(([k,v])=>{state.config.incomeHist[k]=Math.round(v*100)/100});save();csv=null;$("importOut").textContent="";renderAll();
+  box.appendChild(el("p","note",r.exp.length+" gastos nuevos"+(r.exp.length?" ("+fmtDay(r.exp[0].date)+" → "+fmtDay(r.exp[r.exp.length-1].date)+")":"")+(r.dup?" · "+r.dup+" ya los tenías":"")+(r.links.length?" · "+r.links.length+" ya los habías apuntado a mano (no se duplican)":"")));
+  const b=el("button","save","Importar "+r.exp.length+" gastos"); b.type="button"; b.disabled=!r.exp.length&&!r.links.length&&!Object.keys(r.inc).length;
+  b.onclick=()=>{try{r.exp.forEach(addItem);r.links.forEach(([i,c,d])=>{i.bank=c;i.bankDate=d});Object.entries(r.inc).forEach(([k,v])=>{state.config.incomeHist[k]=Math.round(v*100)/100});save();csv=null;$("importOut").textContent="";renderAll();
       $("importOut").appendChild(el("p","msg","Importados "+r.exp.length+" gastos. Revisa en Gastos los que queden sin clasificar."));toast("Importados "+r.exp.length+" gastos")}catch(e){showErr("No se pudo importar: "+e.message)}};
   box.appendChild(b);
 }
