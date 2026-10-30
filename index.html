@@ -200,6 +200,7 @@ details.fold>summary .label{margin-left:auto}
 .bote:first-child{border-top:0}
 .bote input{border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:7px 8px;min-width:0;width:100%}
 .bote .pct{display:flex;align-items:center;gap:3px}.bote .pct input{text-align:right;font-family:var(--f-num)}
+.bote .seg{grid-column:2/-1;justify-self:start}.bote .seg button{padding:5px 10px;font-size:.76rem}
 .bote b{font-family:var(--f-num);font-size:1.05rem;text-align:right;white-space:nowrap}
 /* Total */
 .chart svg{display:block;width:100%;height:auto;overflow:visible}
@@ -275,7 +276,7 @@ details.fold>summary .label{margin-left:auto}
       <h2>Tu plan</h2>
       <div class="inputs">
         <label class="field" for="income">Cobras al mes<span class="money"><input id="income" inputmode="decimal" placeholder="1300" autocomplete="off"><span>€</span></span></label>
-        <label class="field" for="goal">Quieres ahorrar<span class="money"><input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"><span>€</span></span></label>
+        <label class="field" for="goal">Ahorras (tus botes)<span class="money"><input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"><span>€</span></span></label>
       </div>
       <div id="planOut" class="wrap" style="gap:12px"></div>
     </section>
@@ -677,7 +678,7 @@ function cfg(c){c=c||{};return{
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
   countMoves:!!c.countMoves,triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
-  botes:Array.isArray(c.botes)&&c.botes.length?c.botes:[{n:"Gastos",p:50},{n:"Ahorro",p:25},{n:"Caprichos",p:15},{n:"Imprevistos",p:10}],cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
+  botes:Array.isArray(c.botes)&&c.botes.length?c.botes:[{n:"Gastos",p:50,t:"gasta"},{n:"Ahorro",p:25,t:"aparta"},{n:"Caprichos",p:15,t:"gasta"},{n:"Imprevistos",p:10,t:"aparta"}],cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
   state={config:cfg({}),months:{}};
@@ -695,6 +696,7 @@ function migrate(){
     Object.values(state.months).forEach(l=>l.forEach(i=>{delete i.fixed;if(!i.id||seen.has(i.id))i.id=uid();seen.add(i.id);i.amount=Math.round((+i.amount||0)*100)/100}));
     c.v=6; save();
   }
+  c.botes.forEach((b,i)=>{if(b.t!=="aparta"&&b.t!=="gasta")b.t=(i===1||i===3)?"aparta":"gasta"});
   if(!c.huchaStart){
     const cur=monthKey(new Date()); c.huchaStart=cur;
     // si ya cerró este mes con la nómina, su ahorro real manda
@@ -763,7 +765,7 @@ function computePlan(){
   const extraMonthly=ks.length?rep.reduce((a,i)=>a+i.amount,0)/ks.length:0;
   const ih=state.config.incomeHist||{};
   const incomeAuto=median(ks.map(k=>ih[k]||0).filter(v=>v>0));
-  const income=state.config.income||incomeAuto, goal=state.config.goal||0;
+  const income=state.config.income||incomeAuto, bg=botesGoal(income), goal=bg!=null?bg:(state.config.goal||0);
   const reserve=state.config.reserveExtras?extraMonthly:0;
   const allowed=income-goal-fixedMonthly-reserve;
   return{ks,n:ks.length,diaMonthly:median(dia),catMed,fixedMonthly,fixedByCat,active,grandes,extraMonthly,incomeAuto,income,goal,reserve,allowed,configured:income>0&&goal>0};
@@ -1037,13 +1039,14 @@ function renderPlan(){
   const P=PLAN, inI=$("income"), gI=$("goal");
   if(document.activeElement!==inI){inI.value=state.config.income?String(state.config.income).replace(".",","):""}
   inI.placeholder=P.incomeAuto?String(Math.round(P.incomeAuto)):"1300";
-  if(document.activeElement!==gI){gI.value=state.config.goal?String(state.config.goal).replace(".",","):""}
+  gI.readOnly=true; gI.value=P.goal?String(Math.round(P.goal*100)/100).replace(".",","):"";
   const out=$("planOut"); out.textContent="";
   if(!(P.income>0)){out.appendChild(el("p","note","Escribe cuánto cobras al mes y cuánto quieres ahorrar."));return}
   const flow=el("div","flow");
   const row=(label,val,cls,small)=>{const r=el("div","r"+(cls?" "+cls:""));const l=el("span");if(typeof label==="string")l.append(label);else l.appendChild(label);if(small)l.appendChild(el("small",null,small));r.append(l,el("b",null,val));flow.appendChild(r)};
   row("Cobras",fmt(P.income),"",state.config.income?null:"detectado en tu banco");
-  row("Quieres ahorrar","−"+fmt(P.goal),"minus");
+  { const gl=el("span"); gl.append("Apartas en tus botes "); const bk=el("button","link","ver"); bk.type="button"; bk.onclick=()=>$("botesCard").scrollIntoView({behavior:"smooth",block:"start"}); gl.appendChild(bk);
+    row(gl,"−"+fmt(P.goal),"minus",botesAparta().map(b=>b.n).join(" + ")||null); }
   row("Para gastar",fmt(P.income-P.goal),"sub");
   const fl=el("span"); fl.append("Gastos fijos "); const lk=el("button","link","ver"); lk.type="button"; lk.onclick=()=>$("h-fijos").scrollIntoView({behavior:"smooth",block:"start"}); fl.appendChild(lk);
   const yearlyPart=P.active.filter(r=>r.every>1||r.per>40).reduce((a,r)=>a+r.monthly,0);
@@ -1067,7 +1070,7 @@ function renderPlan(){
       if(reach<gap-1){
         const real=Math.max(0,Math.floor((P.goal-(gap-reach))/10)*10);
         adv.appendChild(el("p",null,"Ni recortando todo lo razonable (unos "+fmt(reach)+" al mes) llegas a "+fmt(P.goal)+". "+(real>0?"Una meta realista ahora es "+fmt(real)+" al mes.":"Ahora mismo gastas más de lo que cobras: el primer paso es no tirar de ahorros.")));
-        if(real>0){const b=el("button","btn go","Usar "+fmt(real)+" como meta");b.type="button";b.onclick=()=>{state.config.goal=real;save();renderAll();toast("Meta: "+fmt(real)+" al mes")};adv.appendChild(b)}
+        if(real>0&&P.income){const pc=Math.floor(real/P.income*100);adv.appendChild(el("p","note","Para eso, baja tus botes de apartar a un "+pc+" % en total."))}
       } else adv.appendChild(el("p",null,"Con estos recortes llegas a tu meta."));
     }
     out.appendChild(adv);
@@ -1078,8 +1081,8 @@ function renderPlan(){
   }
 }
 let planT=null;
-function planInput(){state.config.income=num($("income").value);state.config.goal=num($("goal").value);clearTimeout(planT);planT=setTimeout(()=>{save()},500);renderAll()}
-$("income").addEventListener("input",planInput); $("goal").addEventListener("input",planInput);
+function planInput(){state.config.income=num($("income").value);clearTimeout(planT);planT=setTimeout(()=>{save()},500);renderAll()}
+$("income").addEventListener("input",planInput); $("goal").addEventListener("click",()=>$("botesCard").scrollIntoView({behavior:"smooth",block:"start"}));
 
 function renderLimits(){
   const P=PLAN, k=monthKey(new Date()), sp=catSpent(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0);
@@ -1276,6 +1279,12 @@ $("csvFile").addEventListener("change",e=>{const f=e.target.files[0];if(f)readIm
 $("pasteGo").onclick=()=>{const t=$("pasteText").value;if(!t.trim()){importError("Pega primero el texto copiado de Excel.");return}setupCSV(t,"el texto pegado")};
 
 /* ================= BOTES (reparto de la nómina) ================= */
+const botesAparta=()=>state.config.botes.filter(b=>b.t==="aparta");
+function botesGoal(income){
+  const B=state.config.botes,t=B.reduce((a,b)=>a+(+b.p||0),0);
+  if(!income||Math.abs(t-100)>0.01) return null;
+  return Math.round(income*botesAparta().reduce((a,b)=>a+(+b.p||0),0))/100;
+}
 const BOTE_COL=["#16F2E5","#3DFFA8","#FF2BD6","#FCEE0A","#9B5CFF","#FF8A3D"];
 function renderBotes(){
   const C=state.config, inc=C.income||0, L=$("botesList"); L.textContent="";
@@ -1285,15 +1294,17 @@ function renderBotes(){
     const n=el("input");n.value=b.n;n.setAttribute("aria-label","Nombre del bote");n.onchange=()=>{b.n=n.value.trim()||b.n;save()};
     const pw=el("label","pct"),p=el("input");p.inputMode="decimal";p.value=String(b.p).replace(".",",");p.setAttribute("aria-label","Porcentaje de "+b.n);pw.append(p,el("span","muted","%"));
     const v=el("b",null,inc?fmt(inc*b.p/100):"—");
-    p.oninput=()=>{b.p=Math.max(0,num(p.value));v.textContent=inc?fmt(inc*b.p/100):"—";msg()};p.onchange=()=>{save();renderBotes()};
-    r.append(d,n,pw,v);L.appendChild(r);
+    p.oninput=()=>{b.p=Math.max(0,num(p.value));v.textContent=inc?fmt(inc*b.p/100):"—";msg()};p.onchange=()=>{save();renderAll()};
+    const tg=el("div","seg");tg.setAttribute("role","group");tg.setAttribute("aria-label","Qué haces con este bote");
+    [["aparta","Se aparta"],["gasta","Se gasta"]].forEach(([k,l])=>{const x=el("button",null,l);x.type="button";x.setAttribute("aria-pressed",b.t===k?"true":"false");x.onclick=()=>{b.t=k;save();renderAll()};tg.appendChild(x)});
+    r.append(d,n,pw,v,tg);L.appendChild(r);
   });
   function msg(){
     const m=$("botesMsg"),t=C.botes.reduce((a,b)=>a+(+b.p||0),0);m.textContent="";m.style.color="";
     if(!inc){m.textContent="Pon en «Tu plan» cuánto cobras y te digo cuánto va a cada bote.";return}
     if(Math.abs(t-100)>0.01){m.style.color="var(--yellow)";m.textContent="Los porcentajes suman "+String(Math.round(t*10)/10).replace(".",",")+" %: deberían sumar 100 %.";return}
-    const gastos=C.botes[0]?inc*C.botes[0].p/100:0, aparte=inc-gastos;
-    m.append("Cada mes apartas ");m.appendChild(el("b",null,fmt(aparte)));m.append(" en los botes y te quedan ");m.appendChild(el("b",null,fmt(gastos)));m.append(" para «"+(C.botes[0]?C.botes[0].n:"")+"» (incluidos los fijos).");
+    const ap=botesAparta(),aparte=botesGoal(inc),gs=C.botes.filter(b=>b.t!=="aparta");
+    m.append("Apartas ");m.appendChild(el("b",null,fmt(aparte)));m.append(" ("+(ap.map(b=>b.n).join(" + ")||"nada")+"): es tu meta de ahorro en toda la app. Para gastar te quedan ");m.appendChild(el("b",null,fmt(inc-aparte)));m.append(" ("+gs.map(b=>b.n).join(" + ")+"), fijos incluidos.");
   }
   msg();
 }
@@ -1409,7 +1420,7 @@ function renderHist(){
 }
 
 /* ================= Arranque ================= */
-function renderAll(){computeFixed();PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderBotes();renderLimits();renderFixed();renderSettings()}
+function renderAll(){if(state.config.income){const g=botesGoal(state.config.income);if(g!=null)state.config.goal=g}computeFixed();PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderBotes();renderLimits();renderFixed();renderSettings()}
 $("errClose").onclick=()=>$("errBar").hidden=true;
 (function quote(){let i;try{const l=parseInt(localStorage.getItem("mi-hucha-quote"),10);i=isFinite(l)?(l+1)%QUOTES.length:0;localStorage.setItem("mi-hucha-quote",String(i))}catch(e){i=Math.floor(Math.random()*QUOTES.length)}$("quote").textContent=QUOTES[i]})();
 load(); migrate();
