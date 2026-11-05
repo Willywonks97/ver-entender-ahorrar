@@ -673,7 +673,7 @@ function cfg(c){c=c||{};return{
   cats:Array.isArray(c.cats)&&c.cats.length?c.cats:DEFAULT_CATS.map(x=>({...x})),
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
-  countMoves:!!c.countMoves,triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
+  countMoves:!!c.countMoves,autoSkip:c.autoSkip||[],triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
   cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
@@ -738,7 +738,7 @@ function computeFixed(){
 const MOVE=/revolut|traspaso|transf|reint|cajero|bizum/i;
 // cada gasto es: fijo, movimiento (cajero/bizum), grande (150 € o más) o del día a día
 function kindOf(i){
-  if(FIX_IDS.has(i.id)) return "fijo";
+  if(i.autoKey||FIX_IDS.has(i.id)) return "fijo";
   if(MOVE.test(i.concept||"")) return state.config.countMoves?"dia":"mov";
   if(i.amount>=150) return "grande";
   return "dia";
@@ -827,13 +827,13 @@ function renderHoy(){
     h.appendChild(el("span","label","Puedes gastar hoy"));
     const bl=el("div","bigline"); bl.appendChild(el("span","big"+(left<=0?" bad":""),fmt(today))); h.appendChild(bl);
     h.appendChild(el("p","note",left>0
-      ?"Te quedan "+fmt(left)+" para el día a día hasta fin de mes ("+(S.rem===1?"hoy es el último día":S.rem+" días")+")."
-      :"Este mes ya has gastado "+fmt(-left)+" más de lo previsto para el día a día. Lo que gastes a partir de ahora sale de tu ahorro."));
+      ?"Te quedan "+fmt(left)+" para "+(S.rem===1?"hoy, último día del mes.":S.rem+" días.")
+      :"Te has pasado "+fmt(-left)+" en el día a día. Lo que gastes ahora sale de tu ahorro."));
     const bar=el("div","bar"), ratio=S.dia/P.allowed, pace=S.day/S.dim;
     const fi=el("i",ratio>=1?"bad":(ratio>pace+0.08?"warn":"")); fi.style.width=Math.min(100,ratio*100)+"%"; bar.appendChild(fi);
     const mk=el("b"); mk.style.left="calc("+(pace*100)+"% - 1px)"; bar.appendChild(mk); h.appendChild(bar);
-    const r=el("div","row2"); r.append(el("span",null,"Gastado: "+fmt(S.dia)),el("span","muted","de "+fmt(P.allowed))); h.appendChild(r);
-    h.appendChild(el("p","note small","La marca rosa indica lo que deberías llevar gastado a día de hoy."));
+    const r=el("div","row2"); r.append(el("span",null,fmt(S.dia)+" gastados"),el("span","muted","de "+fmt(P.allowed))); h.appendChild(r);
+    h.appendChild(el("p","note small","La línea rosa marca lo previsto hasta hoy."));
   }
   renderSummary(P,S,cur,mesNom); renderBudgets(cur,S); renderEvolution(cur);
   // últimos
@@ -851,29 +851,30 @@ function renderSummary(P,S,cur,mesNom){
   // una sola cuenta, de arriba abajo, que acaba en la misma cifra que «Te quedan» de arriba
   const f=el("div","flow"), left=P.allowed-S.dia;
   flowRow(f,"Ingresos",fmt(P.income),"",state.config.income?null:"calculado con tus extractos");
-  flowRow(f,"Gastos fijos","−"+fmt(P.fixedMonthly),"minus","recibos, suscripciones y la parte del mes de los pagos anuales");
+  flowRow(f,"Gastos fijos","−"+fmt(P.fixedMonthly),"minus","incluye la parte mensual de los pagos anuales");
   if(P.reserve>0) flowRow(f,"Reserva para extraordinarios","−"+fmt(P.reserve),"minus");
   flowRow(f,"Objetivo de ahorro","−"+fmt(P.goal),"minus");
   flowRow(f,"Para el día a día",fmt(P.allowed),"sub");
-  flowRow(f,"Gastado en el día a día","−"+fmt(S.dia),"minus","del 1 al "+S.day+" de "+mesNom);
-  const t=flowRow(f,left>=0?"Te queda":"Te has pasado",fmt(Math.abs(left)),"total","para los "+S.rem+" días que faltan");
+  flowRow(f,"Gastado hasta hoy","−"+fmt(S.dia),"minus");
+  const t=flowRow(f,left>=0?"Te queda":"Te has pasado",fmt(Math.abs(left)),"total",left>=0?"para "+S.rem+(S.rem===1?" día":" días"):null);
   if(left<0) t.classList.add("neg");
   c.appendChild(f);
-  if(S.grande>0) c.appendChild(el("p","alert","Este mes también has tenido "+fmt(S.grande)+" de gastos extraordinarios. No entran en el día a día: salen de tu ahorro, que bajaría a "+fmt(P.goal-S.grande)+"."));
+  if(S.grande>0) c.appendChild(el("p","alert","Este mes has tenido "+fmt(S.grande)+" de gastos extraordinarios. No están en esta cuenta: salen de tu ahorro."));
+  { const v=savingIfStop(P,S), p=el("p","note"); p.append("Si no gastas nada más, este mes ahorrarás "); p.appendChild(el("b",null,fmt(v))); p.append("."); c.appendChild(p); }
   // previsión: solo cuando hay días suficientes para que signifique algo
   if(S.day>=10){
     const projDia=S.dia/S.day*S.dim, ahorro=P.goal+(P.allowed-projDia)-S.grande, p=el("p","note");
-    p.append("Previsión: si sigues gastando como hasta ahora, acabarás el mes con unos "+fmt(projDia)+" de gasto en el día a día y ahorrarás ");
-    p.appendChild(el("b",null,fmt(ahorro)));p.append(ahorro>=P.goal?". Cumples tu objetivo.":", "+fmt(P.goal-ahorro)+" menos de tu objetivo.");
+    p.append("Si sigues al ritmo de estos "+S.day+" días, ahorrarás unos ");
+    p.appendChild(el("b",null,fmt(ahorro)));p.append(ahorro>=P.goal?" y cumplirás tu objetivo.":": "+fmt(P.goal-ahorro)+" menos que tu objetivo.");
     c.appendChild(p);
-  } else c.appendChild(el("p","note","Llevas "+S.day+(S.day===1?" día":" días")+" de mes: aún es pronto para prever cómo acabará."));
+  }
   // comparación con el mes anterior, a la misma altura del mes
   const pd=new Date(+cur.slice(0,4),+cur.slice(5,7)-2,1), pk=monthKey(pd);
   if(items(pk).length&&S.day){
     const lim=Math.min(S.day,dimOf(pk));let prev=0;items(pk).forEach(i=>{if(kindOf(i)==="dia"&&+i.date.slice(8,10)<=lim)prev+=i.amount});
     const d=S.dia-prev, p=el("p","note");
-    p.append("Del 1 al "+lim+" de "+MESES[pd.getMonth()]+" gastaste "+fmt(prev)+" en el día a día: este mes llevas ");
-    p.appendChild(el("b",null,Math.abs(d)<1?"lo mismo":(fmt(Math.abs(d))+(d>0?" más":" menos"))));p.append(".");
+    p.append("Del 1 al "+lim+" de "+MESES[pd.getMonth()]+" gastaste "+fmt(prev)+" en el día a día. Este mes llevas "+fmt(S.dia)+(Math.abs(d)<1?", lo mismo.":" ("));
+    if(Math.abs(d)>=1){p.appendChild(el("b",null,fmt(Math.abs(d))+(d>0?" más":" menos")));p.append(").")}
     c.appendChild(p);
   }
 }
@@ -904,7 +905,7 @@ function renderEvolution(cur){
   const ser=ks.map(k=>({k,...monthStatus(k)}));
   if(ser.length<2){c.hidden=true;return} c.hidden=false;
   c.appendChild(el("h2",null,"Evolución"));
-  c.appendChild(el("p","note","Lo que has gastado cada mes, sin contar movimientos entre cuentas. "+MESES[+cur.slice(5,7)-1].replace(/^./,x=>x.toUpperCase())+" todavía está en curso."));
+  c.appendChild(el("p","note","Lo gastado cada mes. El de "+MESES[+cur.slice(5,7)-1]+" (*) aún no ha terminado."));
   const W=340,H=170,top=16,bot=24,n=ser.length,bw=W/n,mx=Math.max(...ser.map(s=>s.dia+s.fijo+s.grande),1);
   const y=v=>top+(1-v/mx)*(H-top-bot);
   const NS="http://www.w3.org/2000/svg",svg=document.createElementNS(NS,"svg");svg.setAttribute("viewBox","0 0 "+W+" "+H);svg.setAttribute("role","img");
@@ -1024,7 +1025,7 @@ function openEditor(item){
       if(others){const al=el("label","switch");allBox=el("input");allBox.type="checkbox";allBox.id="e-all";al.append(allBox,"Poner esta categoría también a "+(others===1?"el otro gasto":"los otros "+others+" gastos")+" de «"+niceName(item.concept)+"»");p.appendChild(al)}}
     const msg=el("p","msg"); p.appendChild(msg);
     const sv=el("button","save",isNew?"Guardar gasto":"Guardar cambios"); sv.type="button"; p.appendChild(sv);
-    if(item){const del=el("button","btn danger");del.type="button";twoTap(del,"Borrar este gasto",()=>{removeItem(item);save();closeSheet();renderAll();toast("Gasto borrado")});p.appendChild(del)}
+    if(item){const del=el("button","btn danger");del.type="button";twoTap(del,"Borrar este gasto",()=>{removeItem(item);if(item.autoKey){(state.config.autoSkip=state.config.autoSkip||[]).push(item.autoKey)}save();closeSheet();renderAll();toast("Gasto borrado")});p.appendChild(del)}
     sv.onclick=()=>{
       const amount=Math.round(num(ai.value)*100)/100;
       if(!(amount>0)){msg.className="msg err";msg.textContent="Escribe un importe mayor que 0.";ai.focus();return}
@@ -1126,28 +1127,32 @@ function renderPlan(){
   if(!P.goal){out.appendChild(el("p","note","Escribe cuánto quieres ahorrar al mes."));return}
   if(P.allowed<=0){out.appendChild(el("div","advice warn","No queda dinero para el día a día. Baja el objetivo de ahorro o revisa tus gastos fijos."));return}
   const now=new Date(), dim=dimOf(monthKey(now));
-  const per=el("p","note"); per.append("Eso son unos "); per.appendChild(el("b",null,fmt(P.allowed/dim)+" al día")); per.append(" para comida, bares, tabaco, gasolina y compras."); out.appendChild(per);
+  const per=el("p","note"); per.append("Son "); per.appendChild(el("b",null,fmt(P.allowed/dim)+" al día")); per.append(" para comida, bares, tabaco, gasolina y compras."); out.appendChild(per);
   if(P.n){
-    const adv=el("div","advice"), gap=P.diaMonthly-P.allowed;
-    if(gap<=0){adv.classList.add("ok");adv.appendChild(el("p",null,"En un mes normal gastas "+fmt(P.diaMonthly)+" en el día a día. Cabe en tu plan: cumplirías tu objetivo y te sobrarían unos "+fmt(-gap)+"."))}
+    const adv=el("div","advice"), gap=P.diaMonthly-P.allowed, f=el("div","flow");
+    adv.appendChild(el("b",null,"¿Es realista?"));
+    flowRow(f,"Tu día a día en un mes normal",fmt(P.diaMonthly),"","media de tus últimos "+P.n+" meses, sin fijos ni extraordinarios");
+    flowRow(f,"Lo que te deja tu plan",fmt(P.allowed));
+    flowRow(f,gap>0?"Gastas de más":"Te sobra",fmt(Math.abs(gap)),gap>0?"total neg":"total");
+    adv.appendChild(f);
+    if(gap<=0){adv.classList.add("ok");adv.appendChild(el("p",null,"Gastando como un mes normal cumples tu objetivo."))}
     else{
       adv.classList.add("warn");
-      const p1=el("p");p1.append("En un mes normal gastas ");p1.appendChild(el("b",null,fmt(P.diaMonthly)));p1.append(" en el día a día. Para cumplir tu objetivo tendrías que gastar ");p1.appendChild(el("b",null,fmt(gap)+" menos al mes"));p1.append(".");adv.appendChild(p1);
-      adv.appendChild(el("p","note","Media de tus últimos "+P.n+" meses completos, sin fijos ni extraordinarios. Dónde se puede recortar más:"));
       const {rows,reach}=cutTips(P,gap);
       const top=rows.filter(r=>r.cut>=3&&r.c.id!=="otros").sort((a,b)=>b.cut-a.cut).slice(0,3);
-      if(top.length){const ul=el("ul");ul.style.cssText="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px";top.forEach(r=>ul.appendChild(el("li",null,r.c.name+": de "+fmt(r.med)+" a "+fmt(r.med-r.cut)+" al mes (−"+fmt(r.cut)+")")));adv.appendChild(ul)}
+      if(top.length){adv.appendChild(el("p",null,"Para cumplir tu objetivo tendrías que gastar "+fmt(gap)+" menos al mes. Donde más margen hay:"));
+        const ul=el("ul");ul.style.cssText="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px";top.forEach(r=>ul.appendChild(el("li",null,r.c.name+": de "+fmt(r.med)+" a "+fmt(r.med-r.cut)+" al mes")));adv.appendChild(ul)}
       if(reach<gap-1){
         const real=Math.max(0,Math.floor((P.goal-(gap-reach))/10)*10);
-        adv.appendChild(el("p",null,"Aunque recortaras todo eso (unos "+fmt(reach)+" al mes), no llegarías a "+fmt(P.goal)+". "+(real>0?"Con tus gastos actuales, un objetivo realista es "+fmt(real)+" al mes.":"Ahora mismo gastas más de lo que ingresas: lo primero es dejar de tirar de ahorros.")));
+        adv.appendChild(el("p",null,real>0?"Ni con esos recortes llegarías del todo. Un objetivo que sí puedes cumplir ahora es "+fmt(real)+" al mes.":"Ahora mismo gastas más de lo que ingresas: lo primero es dejar de tirar de ahorros."));
         if(real>0){const b=el("button","btn go","Usar "+fmt(real)+" como objetivo");b.type="button";b.onclick=()=>{state.config.goal=real;save();renderAll();toast("Objetivo: "+fmt(real)+" al mes")};adv.appendChild(b)}
-      } else adv.appendChild(el("p",null,"Con estos recortes llegarías a tu objetivo."));
+      } else adv.appendChild(el("p",null,"Con esos recortes llegarías a tu objetivo."));
     }
     out.appendChild(adv);
   }
   if(!P.reserve&&P.extraMonthly>20){
     const names=[...new Set(P.grandes.slice().sort((a,b)=>b.amount-a.amount).map(i=>niceName(i.concept)))].slice(0,2).join(", ");
-    out.appendChild(el("p","note","En los últimos "+P.n+" meses has tenido gastos extraordinarios ("+names+"…): unos "+fmt(P.extraMonthly)+" al mes de media. Este plan no los incluye. Si se repiten, saldrán de tu ahorro. Puedes reservar dinero para ellos en Ajustes → Más opciones."));
+    out.appendChild(el("p","note","Este plan no incluye los gastos extraordinarios ("+names+"…). En los últimos "+P.n+" meses han sido unos "+fmt(P.extraMonthly)+" al mes de media. Si se repiten, saldrán de tu ahorro. Puedes reservar para ellos en Ajustes → Más opciones."));
   }
 }
 let planT=null;
@@ -1378,38 +1383,35 @@ function huchaMonths(){
   for(let g=0;g<120;g++){const k=monthKey(d);if(k>=cur)break;out.push(huchaOf(k));d=new Date(d.getFullYear(),d.getMonth()+1,1)}
   return out;
 }
+// lo que ahorrarías este mes si no gastaras nada más: la misma cuenta que «Cuentas del mes» en Hoy
+function savingIfStop(P,S){return P.goal+(P.allowed-S.dia)-S.grande}
 function renderTotal(){
-  const C=state.config, cur=monthKey(new Date()), H=huchaOf(cur), goal=C.goal||0;
+  const C=state.config, cur=monthKey(new Date()), P=PLAN, S=monthStatus(cur), goal=P.goal, mes=MES[+cur.slice(5,7)-1];
   const h=$("totHero"); h.textContent=""; h.classList.remove("bad");
-  if(!C.income){
+  if(!P.configured){
     h.appendChild(el("span","label","Tu hucha"));
     h.appendChild(el("p",null,"Indica en Plan tus ingresos y tu objetivo de ahorro. Aquí verás lo que ahorras cada mes."));
     const b=el("button","cta","Ir a mi plan");b.type="button";b.onclick=()=>setTab("plan");h.appendChild(b);
   } else {
-    h.appendChild(el("span","label","Lo que te queda de "+MES[+cur.slice(5,7)-1]));
-    const cls=H.v<0?" bad":(goal&&H.v>=goal?" ok":"");
-    const bl=el("div","bigline"); bl.appendChild(el("span","big"+cls,fmt(H.v))); h.appendChild(bl);
-    h.appendChild(el("p","note",H.manual?"Cantidad corregida por ti con lo que dice tu banco.":"Tus ingresos menos lo gastado y los fijos que faltan por cobrar. Si no gastas nada más, es lo que ahorrarías este mes."));
-    if(goal&&!H.manual){
-      const bar=el("div","bar"),fi=el("i",H.v<goal?(H.v<0?"bad":"warn"):"");fi.style.width=Math.max(0,Math.min(100,H.v/H.income*100))+"%";fi.style.background=H.v>=goal?"var(--green)":"";bar.appendChild(fi);
-      const mk=el("b");mk.style.left="calc("+(goal/H.income*100)+"% - 1px)";bar.appendChild(mk);h.appendChild(bar);
-      const p=el("p","note");
-      if(H.v>=goal){p.append("La marca rosa es tu objetivo de ahorro ("+fmt(goal)+"). Mientras la barra la supere, lo cumples.")}
-      else if(H.v>0){p.append("Ya estás ");p.appendChild(el("b",null,fmt(goal-H.v)));p.append(" por debajo de tu objetivo de "+fmt(goal)+".")}
-      else p.append("Este mes ya has gastado más de lo que ingresas.");
-      h.appendChild(p);
+    const man=C.huchaFix[cur], v=man!=null&&isFinite(+man)?+man:savingIfStop(P,S);
+    h.appendChild(el("span","label",man!=null?"Ahorro de "+mes+" (corregido por ti)":"Si no gastas nada más, en "+mes+" ahorrarás"));
+    const bl=el("div","bigline"); bl.appendChild(el("span","big"+(v<0?" bad":v>=goal?" ok":""),fmt(v))); h.appendChild(bl);
+    if(man==null){
+      const f=el("div","flow");
+      flowRow(f,"Objetivo de ahorro",fmt(goal));
+      flowRow(f,P.allowed-S.dia>=0?"Lo que aún no has gastado del día a día":"Lo que te has pasado en el día a día",(P.allowed-S.dia>=0?"+":"−")+fmt(Math.abs(P.allowed-S.dia)),P.allowed-S.dia>=0?"":"minus");
+      if(S.grande>0) flowRow(f,"Gastos extraordinarios","−"+fmt(S.grande),"minus");
+      flowRow(f,"Ahorro si no gastas más",fmt(v),"total");
+      h.appendChild(f);
+      h.appendChild(el("p","note","Cada gasto del día a día que apuntes resta de esta cifra."));
     }
-    const f=el("div","flow");
-    const row=(l,v,cls)=>{const r=el("div","r"+(cls?" "+cls:""));r.append(el("span",null,l),el("b",null,v));f.appendChild(r)};
-    row("Ingresos",fmt(H.income)); row("Gastado hasta hoy","−"+fmt(H.gastado),"minus"); row("Fijos que faltan por cobrar","−"+fmt(H.fijos),"minus");
-    const fx=el("button","link","¿No cuadra con tu banco? Corrígelo");fx.type="button";fx.onclick=()=>{$("histBox").open=true;$("histBox").scrollIntoView({block:"center"})};
-    const d=el("details");d.appendChild(el("summary",null,"¿De dónde sale?"));const dv=el("div");dv.style.marginTop="6px";dv.appendChild(f);d.appendChild(dv);h.appendChild(d);h.appendChild(fx);
+    const fx=el("button","link","¿No cuadra con tu banco? Corrígelo");fx.type="button";fx.onclick=()=>{$("histBox").open=true;$("histBox").scrollIntoView({block:"center"})};h.appendChild(fx);
   }
   renderChart(); renderHist();
 }
 function renderChart(){
   const box=$("chartBox"); box.textContent=""; const ms=huchaMonths().slice(-12), goal=state.config.goal||0;
-  const head=$("totChart").querySelector("h2"); head.textContent="Lo que llevas ahorrado";
+  const head=$("totChart").querySelector("h2"); head.textContent="Ahorro de cada mes";
   if(!ms.length){box.appendChild(el("p","note","Cuando termine este mes, lo que hayas ahorrado aparecerá aquí. Cada mes se añade una barra."));return}
   let acc=0; const ser=ms.map(m=>{acc+=m.v;return{k:m.k,v:m.v,acc}});
   const bl=el("div","bigline"); bl.appendChild(el("span","big"+(acc>=0?" ok":" bad"),fmt(acc))); bl.appendChild(el("span","muted","desde "+MES[+ser[0].k.slice(5,7)-1])); box.appendChild(bl);
@@ -1431,7 +1433,7 @@ function renderChart(){
   if(n>1){mk("polyline",{points:ser.map((s,i)=>cx(i)+","+y(s.acc)).join(" "),fill:"none",stroke:"#16F2E5","stroke-width":2,"stroke-linejoin":"round"});
     ser.forEach((s,i)=>mk("circle",{cx:cx(i),cy:y(s.acc),r:3,fill:"#16F2E5"}))}
   const ch=el("div","chart");ch.appendChild(svg);box.appendChild(ch);
-  const lg=el("p","note");lg.textContent=n>1?"Barras: lo que ahorraste cada mes. Línea azul: el total acumulado.":"La barra es lo que ahorraste ese mes. Cada mes se añade una.";box.appendChild(lg);
+  const lg=el("p","note");lg.textContent="Ahorro real: ingresos menos todo lo gastado ese mes, fijos incluidos."+(n>1?" La línea azul es el total acumulado.":"");box.appendChild(lg);
   const last=ser[n-1].v,prev=n>1?ser[n-2].v:null;let streak=0;for(let i=n-1;i>=0&&ser[i].v>0;i--)streak++;
   const msg=el("p");msg.style.fontWeight="600";
   if(last>0&&prev!=null&&prev<=0) msg.textContent="En "+MES[+ser[n-1].k.slice(5,7)-1]+" volviste a ahorrar.";
@@ -1457,7 +1459,26 @@ function renderHist(){
 }
 
 /* ================= Arranque ================= */
-function renderAll(){computeFixed();PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderLimits();renderFixed();renderSettings()}
+/* Los fijos se apuntan solos el día que toca; el extracto, al importarlo, los reconoce y no los duplica */
+function autoFixed(){
+  const today=todayISO(), from=(d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()))(new Date(Date.now()-40*86400000)), skip=new Set(state.config.autoSkip||[]), add=[];
+  FIX.filter(r=>r.active&&r.last).forEach(r=>{
+    const every=r.every||(r.per>40?Math.round(r.per/30.44):1), day=+r.last.slice(8,10), root=merchantRoot(r.name);
+    for(let n=1;n<=24;n++){
+      const d=new Date(+r.last.slice(0,4),+r.last.slice(5,7)-1+n*every,1), k=monthKey(d), due=k+"-"+pad(Math.min(day,dimOf(k)));
+      if(due>today) break; if(due<from) continue;
+      const key=root+"|"+r.amount.toFixed(2)+"|"+due;
+      if(skip.has(key)) continue;
+      const tol=Math.max(1,r.amount*(every>1?0.3:0.1));
+      // ya apuntado: mismo comercio ese mes, o mismo importe y categoría a menos de 5 días (apuntado a mano con otro nombre)
+      if(items(k).some(i=>i.autoKey===key||(merchantRoot(i.concept)===root&&Math.abs((i.origAmount??i.amount)-r.amount)<=tol)||(i.cat===r.cat&&Math.abs((i.origAmount??i.amount)-r.amount)<0.01&&Math.abs(dayNum(i.date)-dayNum(due))<=5))) continue;
+      add.push({id:uid(),created:Date.now(),amount:Math.round(r.amount*100)/100,cat:r.cat,concept:r.name,date:due,autoKey:key});
+    }
+  });
+  if(add.length){add.forEach(addItem);save();computeFixed()}
+  return add.length;
+}
+function renderAll(){computeFixed();const nAuto=autoFixed();if(nAuto)setTimeout(()=>toast(nAuto===1?"Se ha apuntado 1 gasto fijo":"Se han apuntado "+nAuto+" gastos fijos"),300);PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderPlan();renderLimits();renderFixed();renderSettings()}
 $("errClose").onclick=()=>$("errBar").hidden=true;
 (function quote(){let i;try{const l=parseInt(localStorage.getItem("mi-hucha-quote"),10);i=isFinite(l)?(l+1)%QUOTES.length:0;localStorage.setItem("mi-hucha-quote",String(i))}catch(e){i=Math.floor(Math.random()*QUOTES.length)}$("quote").textContent=QUOTES[i]})();
 load(); migrate();
