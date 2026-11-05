@@ -662,7 +662,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.1";
+const APP_VERSION="1.0.2";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -1147,10 +1147,6 @@ function renderPlan(){
   if(P.allowed<=0){out.appendChild(el("div","advice warn","No queda dinero para el día a día. Baja el objetivo de ahorro o revisa tus gastos fijos."));return}
   const now=new Date(), dim=dimOf(monthKey(now));
   const per=el("p","note"); per.append("Son "); per.appendChild(el("b",null,fmt(P.allowed/dim)+" al día")); per.append(" para comida, bares, tabaco, gasolina y compras."); out.appendChild(per);
-  if(!P.reserve&&P.extraMonthly>20){
-    const names=[...new Set(P.grandes.slice().sort((a,b)=>b.amount-a.amount).map(i=>niceName(i.concept)))].slice(0,2).join(", ");
-    out.appendChild(el("p","note","Este plan no incluye los gastos extraordinarios ("+names+"…). En los últimos "+P.n+" meses han sido unos "+fmt(P.extraMonthly)+" al mes de media. Si se repiten, saldrán de tu ahorro. Puedes reservar para ellos en Ajustes → Más opciones."));
-  }
 }
 let planT=null;
 function planInput(){state.config.income=num($("income").value);state.config.goal=num($("goal").value);clearTimeout(planT);planT=setTimeout(()=>{save()},500);renderAll()}
