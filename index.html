@@ -158,6 +158,9 @@ small.neg,.flow .r.neg b{color:var(--red)!important}
 .fx b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fx .a{font-family:var(--f-num);text-align:right}
 .fx small{color:var(--muted);font-size:.76rem}
+.dayset{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.8rem;color:var(--muted)}
+.dayset input{width:52px;border:1px solid var(--line);border-radius:8px;background:var(--bg);padding:6px;text-align:center;font-family:var(--f-num);color:var(--ink)}
+.warnTxt{color:var(--yellow)}
 .fx .acts{grid-column:1/-1;display:flex;gap:6px;flex-wrap:wrap}
 .fx.cancel b{text-decoration:line-through;opacity:.6}
 .fx .acts .btn{padding:6px 10px;font-size:.78rem}
@@ -673,7 +676,7 @@ function cfg(c){c=c||{};return{
   cats:Array.isArray(c.cats)&&c.cats.length?c.cats:DEFAULT_CATS.map(x=>({...x})),
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
-  countMoves:!!c.countMoves,autoSkip:c.autoSkip||[],triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
+  countMoves:!!c.countMoves,autoSkip:c.autoSkip||[],fixDay:c.fixDay||{},triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
   cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
@@ -1195,6 +1198,16 @@ function renderFixed(){
       :catById(r.cat).name+(r.count?" · "+r.count+(r.count===1?" cobro":" cobros")+(r.first&&r.first.slice(0,7)!==r.last.slice(0,7)?" ("+mshort(r.first)+" – "+mshort(r.last)+")":" ("+mshort(r.last)+")"):"")+" · "+fmt(r.yearly)+" al año"+(r.manual?" · añadido por ti":"");
     const sm=el("small",null,meta); sm.style.gridColumn="1/-1"; d.appendChild(sm);
     if(r.active){
+      const ev=r.every||(r.per>40?Math.round(r.per/30.44):1), dy=fixDayOf(r), dw=el("label","dayset");
+      if(ev===1){
+        const di=el("input");di.inputMode="numeric";di.id="fd-"+String(r.key).replace(/[^a-z0-9]/gi,"");di.value=dy?String(dy):"";di.placeholder="—";di.setAttribute("aria-label","Día de cobro de "+niceName(r.name));
+        dw.append("Se cobra el día ",di," de cada mes");
+        di.onchange=()=>{const v=Math.round(num(di.value));if(!(v>=1&&v<=31)){di.value=dy?String(dy):"";toast("Escribe un día del 1 al 31");return}
+          if(r.ruleId){const rule=state.config.fixedRules.find(x=>x.id===r.ruleId);if(rule)rule.day=v}else state.config.fixDay[fixKey(r)]=v;
+          save();renderAll();toast(niceName(r.name)+": se apuntará el día "+v)};
+        if(!dy) dw.appendChild(el("span","warnTxt"," · sin día, no se apunta solo"));
+      } else dw.append(r.next?"Se apunta solo cuando toque el pago":"");
+      d.appendChild(dw);
       const a=el("div","acts");
       const c=el("button","btn"+(rev[r.key]==="cancel"?" go":""),rev[r.key]==="cancel"?"Lo voy a dar de baja ✓":"Lo voy a dar de baja"); c.type="button";
       c.onclick=()=>{if(rev[r.key])delete rev[r.key];else rev[r.key]="cancel";save();renderAll()};
@@ -1460,12 +1473,22 @@ function renderHist(){
 
 /* ================= Arranque ================= */
 /* Los fijos se apuntan solos el día que toca; el extracto, al importarlo, los reconoce y no los duplica */
+const isoOfD2=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const fixKey=r=>merchantRoot(r.name)+"|"+(+r.avg||+r.amount).toFixed(2);
+function fixDayOf(r){
+  if(r.ruleId){const rule=state.config.fixedRules.find(x=>x.id===r.ruleId);if(rule&&+rule.day)return +rule.day}
+  const d=+state.config.fixDay[fixKey(r)]; if(d) return d;
+  return r.last?+r.last.slice(8,10):0;
+}
 function autoFixed(){
   const today=todayISO(), from=(d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()))(new Date(Date.now()-40*86400000)), skip=new Set(state.config.autoSkip||[]), add=[];
-  FIX.filter(r=>r.active&&r.last).forEach(r=>{
-    const every=r.every||(r.per>40?Math.round(r.per/30.44):1), day=+r.last.slice(8,10), root=merchantRoot(r.name);
+  FIX.filter(r=>r.active).forEach(r=>{
+    const every=r.every||(r.per>40?Math.round(r.per/30.44):1), day=fixDayOf(r), root=merchantRoot(r.name);
+    if(!day) return; // sin día de cobro no se puede apuntar
+    if(!r.last&&every>1) return; // un pago anual sin ningún cobro: no sé en qué mes toca
+    const base=r.last||isoOfD2(new Date(new Date().getFullYear(),new Date().getMonth()-1,1));
     for(let n=1;n<=24;n++){
-      const d=new Date(+r.last.slice(0,4),+r.last.slice(5,7)-1+n*every,1), k=monthKey(d), due=k+"-"+pad(Math.min(day,dimOf(k)));
+      const d=new Date(+base.slice(0,4),+base.slice(5,7)-1+n*every,1), k=monthKey(d), due=k+"-"+pad(Math.min(day,dimOf(k)));
       if(due>today) break; if(due<from) continue;
       const key=root+"|"+r.amount.toFixed(2)+"|"+due;
       if(skip.has(key)) continue;
