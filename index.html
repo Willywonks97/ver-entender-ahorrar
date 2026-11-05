@@ -669,7 +669,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.3";
+const APP_VERSION="1.0.4";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -689,7 +689,7 @@ function cfg(c){c=c||{};return{
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
   countMoves:!!c.countMoves,autoSkip:c.autoSkip||[],fixDay:c.fixDay||{},triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
-  cierres:c.cierres||{},huchaFix:c.huchaFix||{},huchaStart:c.huchaStart||"",v:c.v||0}}
+  cierres:c.cierres||{},huchaFix:c.huchaFix||{},progAdj:c.progAdj||{},huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
   state={config:cfg({}),months:{}};
@@ -1478,9 +1478,20 @@ function renderProgresion(){
   const tot=ms.reduce((a,m)=>a+Math.max(0,m.v),0),sum=REPARTO.reduce((a,r)=>a+r[1],0);
   boxes.appendChild(el("h2",null,"Dónde queda lo ahorrado"));
   const flow=el("div","flow");
-  REPARTO.forEach(r=>flowRow(flow,r[0],fmt(tot*r[1]/sum),"total",Math.round(r[1]/sum*100)+" % de lo ahorrado"));
+  const C=state.config; C.progAdj=C.progAdj||{};
+  REPARTO.forEach((r,ix)=>{
+    const auto=tot*r[1]/sum, adj=+C.progAdj[ix]||0, edited=C.progAdj[ix]!=null;
+    const row=el("div","r total"),l=el("span");l.append(r[0]);
+    l.appendChild(el("small",null,edited?"Modificado a mano · automático "+fmt(auto):Math.round(r[1]/sum*100)+" % de lo ahorrado"));
+    const w=el("label","money"),inp=el("input");w.style.cssText="width:140px;flex:none";inp.inputMode="decimal";inp.value=String(Math.round((auto+adj)*100)/100).replace(".",",");inp.setAttribute("aria-label","Importe de "+r[0]);
+    inp.onchange=()=>{if(!inp.value.trim())return;C.progAdj[ix]=Math.round((num(inp.value)-auto)*100)/100;save();renderAll();toast("Modificado")};
+    w.append(inp,el("span",null,"€"));
+    const x=el("button",null,"×");x.type="button";x.setAttribute("aria-label","Volver al reparto automático");x.disabled=!edited;x.style.opacity=edited?1:.3;
+    x.onclick=()=>{delete C.progAdj[ix];save();renderAll()};
+    row.append(l,w,x);flow.appendChild(row);
+  });
   boxes.appendChild(flow);
-  boxes.appendChild(el("p","note","Total ahorrado desde "+MES[+ms[0].k.slice(5,7)-1]+": "+fmt(tot)+". Cada mes que acaba se reparte solo. Los meses en que gastas más de lo que ingresas no suman."));
+  boxes.appendChild(el("p","note","Total ahorrado desde "+MES[+ms[0].k.slice(5,7)-1]+": "+fmt(tot)+". Cada mes que acaba se reparte solo. Cambia el importe de una casilla para corregirla o restar un capricho; la × la deja en automático. Los meses en que gastas más de lo que ingresas no suman."));
 }
 function renderHist(){
   const l=$("histList"); l.textContent=""; const C=state.config, cur=monthKey(new Date());
