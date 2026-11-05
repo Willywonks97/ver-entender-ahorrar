@@ -662,7 +662,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.0";
+const APP_VERSION="1.0.1";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -1147,28 +1147,6 @@ function renderPlan(){
   if(P.allowed<=0){out.appendChild(el("div","advice warn","No queda dinero para el día a día. Baja el objetivo de ahorro o revisa tus gastos fijos."));return}
   const now=new Date(), dim=dimOf(monthKey(now));
   const per=el("p","note"); per.append("Son "); per.appendChild(el("b",null,fmt(P.allowed/dim)+" al día")); per.append(" para comida, bares, tabaco, gasolina y compras."); out.appendChild(per);
-  if(P.n){
-    const adv=el("div","advice"), gap=P.diaMonthly-P.allowed, f=el("div","flow");
-    adv.appendChild(el("b",null,"¿Es realista?"));
-    flowRow(f,"Tu día a día en un mes normal",fmt(P.diaMonthly),"","media de tus últimos "+P.n+" meses, sin fijos ni extraordinarios");
-    flowRow(f,"Lo que te deja tu plan",fmt(P.allowed));
-    flowRow(f,gap>0?"Gastas de más":"Te sobra",fmt(Math.abs(gap)),gap>0?"total neg":"total");
-    adv.appendChild(f);
-    if(gap<=0){adv.classList.add("ok");adv.appendChild(el("p",null,"Gastando como un mes normal cumples tu objetivo."))}
-    else{
-      adv.classList.add("warn");
-      const {rows,reach}=cutTips(P,gap);
-      const top=rows.filter(r=>r.cut>=3&&r.c.id!=="otros").sort((a,b)=>b.cut-a.cut).slice(0,3);
-      if(top.length){adv.appendChild(el("p",null,"Para cumplir tu objetivo tendrías que gastar "+fmt(gap)+" menos al mes. Donde más margen hay:"));
-        const ul=el("ul");ul.style.cssText="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px";top.forEach(r=>ul.appendChild(el("li",null,r.c.name+": de "+fmt(r.med)+" a "+fmt(r.med-r.cut)+" al mes")));adv.appendChild(ul)}
-      if(reach<gap-1){
-        const real=Math.max(0,Math.floor((P.goal-(gap-reach))/10)*10);
-        adv.appendChild(el("p",null,real>0?"Ni con esos recortes llegarías del todo. Un objetivo que sí puedes cumplir ahora es "+fmt(real)+" al mes.":"Ahora mismo gastas más de lo que ingresas: lo primero es dejar de tirar de ahorros."));
-        if(real>0){const b=el("button","btn go","Usar "+fmt(real)+" como objetivo");b.type="button";b.onclick=()=>{state.config.goal=real;save();renderAll();toast("Objetivo: "+fmt(real)+" al mes")};adv.appendChild(b)}
-      } else adv.appendChild(el("p",null,"Con esos recortes llegarías a tu objetivo."));
-    }
-    out.appendChild(adv);
-  }
   if(!P.reserve&&P.extraMonthly>20){
     const names=[...new Set(P.grandes.slice().sort((a,b)=>b.amount-a.amount).map(i=>niceName(i.concept)))].slice(0,2).join(", ");
     out.appendChild(el("p","note","Este plan no incluye los gastos extraordinarios ("+names+"…). En los últimos "+P.n+" meses han sido unos "+fmt(P.extraMonthly)+" al mes de media. Si se repiten, saldrán de tu ahorro. Puedes reservar para ellos en Ajustes → Más opciones."));
