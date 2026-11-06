@@ -227,6 +227,15 @@ textarea.paste{width:100%;min-height:80px;border:1px solid var(--line);border-ra
 @media (max-width:380px){.big{font-size:2.2rem}.kpis{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}}
 @media (prefers-reduced-motion:reduce){.panel{animation:none}}
 
+.pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pcell{display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg);min-width:0}
+.pcell .pn{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-family:var(--f-num)}
+.pcell .pv{font-family:var(--f-num);font-size:1.1rem;color:var(--green);white-space:nowrap}
+.pcell .pv.neg{color:var(--red)}
+.pcell small{color:var(--muted)}
+.pcell .prow{display:flex;gap:12px;flex-wrap:wrap}
+.pcell .money input{font-size:1rem}
+
 </style>
 </head>
 <body>
@@ -291,14 +300,14 @@ textarea.paste{width:100%;min-height:80px;border:1px solid var(--line);border-ra
       <h2>Tu plan</h2>
       <div class="inputs">
         <label class="field" for="income">Ingresos al mes<span class="money"><input id="income" inputmode="decimal" placeholder="1300" autocomplete="off"><span>€</span></span></label>
-        <label class="field" for="goal">Objetivo de ahorro<span class="money"><input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"><span>€</span></span></label>
+        <label class="field" for="goal">Para ahorrar (50 % de tus ingresos)<span class="money"><input id="goal" inputmode="decimal" placeholder="200" autocomplete="off"><span>€</span></span></label>
       </div>
       <div id="planOut" class="wrap" style="gap:12px"></div>
     </section>
 
     <section class="card" id="limCard">
       <div class="cardhead"><h2>Presupuesto por categoría</h2></div>
-      <p class="note">Lo máximo que quieres gastar al mes en cada categoría, incluidos sus gastos fijos. En «Hoy» ves cómo vas.</p>
+      <p class="note">Se calculan solos con lo que gastas normalmente en cada categoría, fijos incluidos. Si cambias uno, ese se queda como lo pongas (✎). En «Hoy» ves cómo vas.</p>
       <div id="limSum"></div>
       <div id="limList"></div>
     </section>
@@ -669,7 +678,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.4";
+const APP_VERSION="1.0.5";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -681,7 +690,6 @@ const DEFAULT_CATS=[
   {id:"otros",name:"Otros",budget:0}
 ];
 const PAL=["#16F2E5","#FF2BD6","#FCEE0A","#9B5CFF","#FF8A3D","#3DFFA8","#5C9BFF","#FF5C7A","#00C2FF","#C3FF3D","#FF9FD8","#8792B5","#F5B841","#7CF5C8"];
-const CUT_MAX={super:.15,rest:.45,trans:.15,ocio:.4,compras:.45,hogar:.1,subs:.5,tabaco:.5,flores:.4,coche:.05,otros:.3};
 const LS="mi-hucha-v1";
 let state={config:{},months:{}};
 function cfg(c){c=c||{};return{
@@ -689,7 +697,7 @@ function cfg(c){c=c||{};return{
   fixedRules:c.fixedRules||[],fixed:c.fixed||[],income:+c.income||0,goal:+c.goal||0,incomeHist:c.incomeHist||{},
   oneOff:c.oneOff||[],reserveExtras:!!c.reserveExtras,recHidden:c.recHidden||[],recReview:c.recReview||{},
   countMoves:!!c.countMoves,autoSkip:c.autoSkip||[],fixDay:c.fixDay||{},triaged:c.triaged||[],annualNo:c.annualNo||[],lastBackup:c.lastBackup||"",
-  cierres:c.cierres||{},huchaFix:c.huchaFix||{},progAdj:c.progAdj||{},huchaStart:c.huchaStart||"",v:c.v||0}}
+  cierres:c.cierres||{},huchaFix:c.huchaFix||{},progAdj:c.progAdj||{},budgetsPrev:c.budgetsPrev||null,huchaStart:c.huchaStart||"",v:c.v||0}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(LS)||"null");if(s&&s.config&&s.months){state={config:cfg(s.config),months:s.months};return}}catch(e){}
   state={config:cfg({}),months:{}};
@@ -785,7 +793,7 @@ function computePlan(){
   const extraMonthly=ks.length?rep.reduce((a,i)=>a+i.amount,0)/ks.length:0;
   const ih=state.config.incomeHist||{};
   const incomeAuto=median(ks.map(k=>ih[k]||0).filter(v=>v>0));
-  const income=state.config.income||incomeAuto, goal=state.config.goal||0;
+  const income=state.config.income||incomeAuto, goal=Math.round(income*0.5*100)/100;
   const reserve=state.config.reserveExtras?extraMonthly:0;
   const allowed=income-goal-fixedMonthly-reserve;
   return{ks,n:ks.length,diaMonthly:median(dia),catMed,fixedMonthly,fixedByCat,active,grandes,extraMonthly,incomeAuto,income,goal,reserve,allowed,configured:income>0&&goal>0};
@@ -1117,33 +1125,27 @@ function openTriage(){
 }
 
 /* ================= PLAN ================= */
-function suggestLimits(){
-  const P=PLAN, d=cats().map(c=>({c,med:P.catMed[c.id]||0})).filter(x=>x.med>0);
-  const total=d.reduce((a,x)=>a+x.med,0); let gap=total-Math.max(0,P.allowed);
-  d.forEach(x=>x.t=x.med);
-  if(gap>0){const caps=d.map(x=>x.med*(CUT_MAX[x.c.id]??.3)),capSum=caps.reduce((a,b)=>a+b,0),f=capSum?Math.min(1,gap/capSum):0;
-    d.forEach((x,i)=>x.t=x.med-caps[i]*f); gap-=capSum*f;
-    if(gap>0){const t2=d.reduce((a,x)=>a+x.t,0),k=t2>0?Math.max(0,(t2-gap)/t2):0;d.forEach(x=>x.t*=k)}}
-  const out={}; cats().forEach(c=>{const x=d.find(y=>y.c===c);const v=(x?x.t:0)+(P.fixedByCat[c.id]||0);out[c.id]=v>0?Math.max(5,Math.round(v/5)*5):0});
-  return out;
-}
-function cutTips(P,gap){
-  const rows=cats().map(c=>({c,med:P.catMed[c.id]||0,cap:(P.catMed[c.id]||0)*(CUT_MAX[c.id]??.3)})).filter(x=>x.med>0);
-  const capSum=rows.reduce((a,r)=>a+r.cap,0),f=capSum?Math.min(1,gap/capSum):0; rows.forEach(r=>r.cut=r.cap*f);
-  return {rows,reach:rows.reduce((a,r)=>a+r.cut,0)};
+
+/* Presupuestos por categoría: se calculan solos con tu consumo normal (mediana de los últimos meses + fijos). Si cambias uno a mano, ese no se toca. */
+function realOf(c){return (PLAN.catMed[c.id]||0)+(PLAN.fixedByCat[c.id]||0)}
+function autoBudgets(){
+  const C=state.config; let ch=false;
+  if(!C.budgetsPrev){C.budgetsPrev={};cats().forEach(c=>C.budgetsPrev[c.id]=+c.budget||0);ch=true}
+  if(PLAN.n) cats().forEach(c=>{if(c.manual) return;const v=realOf(c)>0?Math.max(5,Math.round(realOf(c)/5)*5):0;if((+c.budget||0)!==v){c.budget=v;ch=true}});
+  if(ch) save();
 }
 function renderPlan(){
   const P=PLAN, inI=$("income"), gI=$("goal");
   if(document.activeElement!==inI){inI.value=state.config.income?String(state.config.income).replace(".",","):""}
   inI.placeholder=P.incomeAuto?String(Math.round(P.incomeAuto)):"1300";
-  if(document.activeElement!==gI){gI.value=state.config.goal?String(state.config.goal).replace(".",","):""}
+  gI.value=P.goal?String(P.goal).replace(".",","):""; gI.disabled=true;
   const out=$("planOut"); out.textContent="";
   if(!(P.income>0)){out.appendChild(el("p","note","Escribe tus ingresos al mes y cuánto quieres ahorrar."));return}
   const flow=el("div","flow");
   const row=(label,val,cls,small)=>{const r=el("div","r"+(cls?" "+cls:""));const l=el("span");if(typeof label==="string")l.append(label);else l.appendChild(label);if(small)l.appendChild(el("small",null,small));r.append(l,el("b",null,val));flow.appendChild(r)};
   row("Ingresos",fmt(P.income),"",state.config.income?null:"calculado con tus extractos");
-  row("Objetivo de ahorro","−"+fmt(P.goal),"minus");
-  row("Para gastar",fmt(P.income-P.goal),"sub");
+  row("Para ahorrar (50 %)","−"+fmt(P.goal),"minus");
+  row("Para vivir (50 %)",fmt(P.income-P.goal),"sub");
   const fl=el("span"); fl.append("Gastos fijos "); const lk=el("button","link","ver"); lk.type="button"; lk.onclick=()=>$("h-fijos").scrollIntoView({behavior:"smooth",block:"start"}); fl.appendChild(lk);
   const yearlyPart=P.active.filter(r=>r.every>1||r.per>40).reduce((a,r)=>a+r.monthly,0);
   row(fl,"−"+fmt(P.fixedMonthly),"minus",P.active.length+(P.active.length===1?" recibo o suscripción":" recibos y suscripciones")+(yearlyPart?" · incluye "+fmt(yearlyPart)+" al mes apartados para pagos anuales":""));
@@ -1156,28 +1158,28 @@ function renderPlan(){
   const per=el("p","note"); per.append("Son "); per.appendChild(el("b",null,fmt(P.allowed/dim)+" al día")); per.append(" para comida, bares, tabaco, gasolina y compras."); out.appendChild(per);
 }
 let planT=null;
-function planInput(){state.config.income=num($("income").value);state.config.goal=num($("goal").value);clearTimeout(planT);planT=setTimeout(()=>{save()},500);renderAll()}
-$("income").addEventListener("input",planInput); $("goal").addEventListener("input",planInput);
+function planInput(){state.config.income=num($("income").value);clearTimeout(planT);planT=setTimeout(()=>{save()},500);renderAll()}
+$("income").addEventListener("input",planInput);
 
 function renderLimits(){
-  const P=PLAN, k=monthKey(new Date()), sp=catSpent(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0);
+  const P=PLAN, k=monthKey(new Date()), sp=catSpent(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0), vivir=P.income-P.goal;
   const ls=$("limSum"); ls.textContent="";
-  const cap=Math.max(0,P.allowed)+P.fixedMonthly;
   const line=el("p","sumline"); ls.appendChild(line);
-  if(P.configured&&sum>cap+5){line.classList.add("bad");line.textContent="Tus presupuestos suman "+fmt(sum)+", pero tu plan solo deja "+fmt(cap)+" (día a día + fijos). Sobran "+fmt(sum-cap)+"."}
-  else if(P.configured&&sum>0) line.textContent="Tus presupuestos suman "+fmt(sum)+" de los "+fmt(cap)+" que deja tu plan (día a día + fijos).";
-  else line.textContent=sum?"Tus presupuestos suman "+fmt(sum)+" al mes.":"Aún no tienes presupuestos.";
-  if(P.configured&&P.n){const b=el("button","btn go",sum?"Repartir según mi plan":"Proponerme presupuestos");b.type="button";b.onclick=()=>{const s=suggestLimits();cats().forEach(c=>c.budget=s[c.id]||0);save();renderAll();toast("Presupuestos repartidos según tu plan")};ls.appendChild(b)}
+  if(P.configured&&sum>vivir+5){line.classList.add("bad");line.textContent="Tu consumo normal suma "+fmt(sum)+" al mes. El 50 % de tu sueldo para vivir son "+fmt(vivir)+": te pasas "+fmt(sum-vivir)+"."}
+  else if(P.configured&&sum>0) line.textContent="Tu consumo normal suma "+fmt(sum)+" al mes, dentro de los "+fmt(vivir)+" del 50 % de tu sueldo.";
+  else line.textContent=sum?"Tu consumo normal suma "+fmt(sum)+" al mes.":"Aún no hay meses completos para calcular tu consumo.";
+  if(cats().some(c=>c.manual)){const b=el("button","btn",""+"Volver todos a automático");b.type="button";b.onclick=()=>{cats().forEach(c=>{delete c.manual});save();renderAll();toast("Presupuestos en automático")};ls.appendChild(b)}
+  const real=cats().reduce((a,c)=>a+realOf(c),0), esc=real>0&&P.configured?vivir/real:0;
   const L=$("limList"); L.textContent="";
   cats().forEach(c=>{
-    const b=+c.budget||0,s=sp[c.id]||0,normal=(P.catMed[c.id]||0)+(P.fixedByCat[c.id]||0);
+    const b=+c.budget||0,s=sp[c.id]||0,normal=realOf(c);
     if(!b&&!s&&!normal) return;
-    const r=el("div","lim"); const n=el("div","n"); const d=el("span","dot"); d.style.background=catColor(c.id); n.append(d,el("span",null,c.name));
+    const r=el("div","lim"); const n=el("div","n"); const d=el("span","dot"); d.style.background=catColor(c.id); n.append(d,el("span",null,c.name+(c.manual?" ✎":"")));
     const m=el("label","money"); const i=el("input"); i.inputMode="decimal"; i.id="lim-"+c.id; i.placeholder="sin presupuesto"; i.value=b?String(b).replace(".",","):""; i.setAttribute("aria-label","Presupuesto de "+c.name);
-    i.addEventListener("change",()=>{c.budget=num(i.value);save();renderAll()}); m.append(i,el("span",null,"€"));
+    i.addEventListener("change",()=>{const v=num(i.value);if(i.value.trim()===""){delete c.manual}else{c.manual=true}c.budget=v;save();renderAll()}); m.append(i,el("span",null,"€"));
     r.append(n,m);
     if(b){const bar=el("div","bar"),ratio=s/b;const f=el("i",ratio>=1?"bad":ratio>=0.8?"warn":"");f.style.width=Math.min(100,ratio*100)+"%";bar.appendChild(f);r.appendChild(bar)}
-    r.appendChild(el("small",null,"Este mes: "+fmt(s)+(b?" de "+fmt(b):"")+" · mes normal: "+fmt(normal)));
+    r.appendChild(el("small",null,"Este mes: "+fmt(s)+(b?" de "+fmt(b):"")+(esc&&normal>0?" · para el 50 %: "+fmt(normal*esc):"")));
     L.appendChild(r);
   });
 }
@@ -1420,7 +1422,7 @@ function renderTotal(){
   renderChart(); renderHist();
 }
 function renderChart(){
-  const box=$("chartBox"); box.textContent=""; const ms=huchaMonths().slice(-12), goal=state.config.goal||0;
+  const box=$("chartBox"); box.textContent=""; const ms=huchaMonths().slice(-12), goal=PLAN.goal||0;
   const head=$("totChart").querySelector("h2"); head.textContent="Ahorro de cada mes";
   if(!ms.length){box.appendChild(el("p","note","Cuando termine este mes, lo que hayas ahorrado aparecerá aquí. Cada mes se añade una barra."));return}
   let acc=0; const ser=ms.map(m=>{acc+=m.v;return{k:m.k,v:m.v,acc}});
@@ -1454,8 +1456,9 @@ function renderChart(){
 }
 
 /* ================= Progresión: lo ahorrado cada mes y cómo se reparte (25-15-10 → 50/30/20 del ahorro) ================= */
-const REPARTO=[["Fondo de emergencia",25],["Fondo de ahorro",15],["Caprichos",10]];
+const REPARTO=[["Fondo de emergencia",25],["Cuenta ahorro",15],["Caprichos",10]];
 function renderProgresion(){
+  try{const a=document.activeElement;if(a&&a.closest&&a.closest("#progBoxes"))a.blur()}catch(e){}
   const card=$("progCard"), boxes=$("progBoxes"); card.textContent=""; boxes.textContent="";
   const ms=huchaMonths();
   card.appendChild(el("h2",null,"Lo ahorrado cada mes"));
@@ -1476,22 +1479,24 @@ function renderProgresion(){
   });
   const ch=el("div","chart");ch.appendChild(svg);card.appendChild(ch);
   const tot=ms.reduce((a,m)=>a+Math.max(0,m.v),0),sum=REPARTO.reduce((a,r)=>a+r[1],0);
-  boxes.appendChild(el("h2",null,"Dónde queda lo ahorrado"));
-  const flow=el("div","flow");
   const C=state.config; C.progAdj=C.progAdj||{};
-  REPARTO.forEach((r,ix)=>{
-    const auto=tot*r[1]/sum, adj=+C.progAdj[ix]||0, edited=C.progAdj[ix]!=null;
-    const row=el("div","r total"),l=el("span");l.append(r[0]);
-    l.appendChild(el("small",null,edited?"Modificado a mano · automático "+fmt(auto):Math.round(r[1]/sum*100)+" % de lo ahorrado"));
-    const w=el("label","money"),inp=el("input");w.style.cssText="width:140px;flex:none";inp.inputMode="decimal";inp.value=String(Math.round((auto+adj)*100)/100).replace(".",",");inp.setAttribute("aria-label","Importe de "+r[0]);
-    inp.onchange=()=>{if(!inp.value.trim())return;C.progAdj[ix]=Math.round((num(inp.value)-auto)*100)/100;save();renderAll();toast("Modificado")};
-    w.append(inp,el("span",null,"€"));
-    const x=el("button",null,"×");x.type="button";x.setAttribute("aria-label","Volver al reparto automático");x.disabled=!edited;x.style.opacity=edited?1:.3;
-    x.onclick=()=>{delete C.progAdj[ix];save();renderAll()};
-    row.append(l,w,x);flow.appendChild(row);
+  const parts=REPARTO.map((r,ix)=>{const auto=tot*r[1]/sum,edited=C.progAdj[ix]!=null;return{ix,name:r[0],pct:r[1],auto,edited,v:auto+(+C.progAdj[ix]||0)}});
+  const total=parts.reduce((a,p)=>a+p.v,0), last=ms[ms.length-1].v;
+  const grid=el("div","pgrid");
+  const cell=(name,sub,val,plus)=>{const c=el("div","pcell");c.appendChild(el("span","pn",name));const v=el("b","pv"+(val<0?" neg":""),(val>=0?"+":"")+fmt(val)+(val>=0?" ↑":" ↓"));c.appendChild(v);if(sub)c.appendChild(el("small",null,sub));return c};
+  grid.appendChild(cell("Total",ms.length>1?"último mes: "+(last>=0?"+":"")+fmt(last):"desde "+MES[+ms[0].k.slice(5,7)-1],total));
+  parts.forEach(p=>{
+    const c=cell(p.name,p.pct+" % de tu sueldo"+(p.edited?" · modificado":""),p.v);
+    const row=el("div","prow");
+    const w=el("label","money"),inp=el("input");inp.inputMode="decimal";inp.value=String(Math.round(p.v*100)/100).replace(".",",");inp.hidden=true;inp.setAttribute("aria-label","Importe de "+p.name);
+    inp.onchange=()=>{if(inp._d||!inp.value.trim())return;inp._d=1;C.progAdj[p.ix]=Math.round((num(inp.value)-p.auto)*100)/100;save();renderAll();toast("Modificado")};
+    w.append(inp,el("span",null,"€"));w.hidden=true;
+    const mod=el("button","link","Modificar");mod.type="button";mod.onclick=()=>{w.hidden=!w.hidden;inp.hidden=w.hidden;if(!w.hidden)inp.focus()};
+    row.appendChild(mod);
+    if(p.edited){const x=el("button","link","Automático");x.type="button";x.onclick=()=>{delete C.progAdj[p.ix];save();renderAll()};row.appendChild(x)}
+    c.append(row,w);grid.appendChild(c);
   });
-  boxes.appendChild(flow);
-  boxes.appendChild(el("p","note","Total ahorrado desde "+MES[+ms[0].k.slice(5,7)-1]+": "+fmt(tot)+". Cada mes que acaba se reparte solo. Cambia el importe de una casilla para corregirla o restar un capricho; la × la deja en automático. Los meses en que gastas más de lo que ingresas no suman."));
+  boxes.appendChild(grid);
 }
 function renderHist(){
   const l=$("histList"); l.textContent=""; const C=state.config, cur=monthKey(new Date());
@@ -1539,7 +1544,7 @@ function autoFixed(){
   if(add.length){add.forEach(addItem);save();computeFixed()}
   return add.length;
 }
-function renderAll(){computeFixed();const nAuto=autoFixed();if(nAuto)setTimeout(()=>toast(nAuto===1?"Se ha apuntado 1 gasto fijo":"Se han apuntado "+nAuto+" gastos fijos"),300);PLAN=computePlan();renderHoy();renderGastos();renderTotal();renderProgresion();renderPlan();renderLimits();renderFixed();renderSettings()}
+function renderAll(){computeFixed();const nAuto=autoFixed();if(nAuto)setTimeout(()=>toast(nAuto===1?"Se ha apuntado 1 gasto fijo":"Se han apuntado "+nAuto+" gastos fijos"),300);PLAN=computePlan();autoBudgets();renderHoy();renderGastos();renderTotal();renderProgresion();renderPlan();renderLimits();renderFixed();renderSettings()}
 $("errClose").onclick=()=>$("errBar").hidden=true;
 (function quote(){let i;try{const l=parseInt(localStorage.getItem("mi-hucha-quote"),10);i=isFinite(l)?(l+1)%QUOTES.length:0;localStorage.setItem("mi-hucha-quote",String(i))}catch(e){i=Math.floor(Math.random()*QUOTES.length)}$("quote").textContent=QUOTES[i]})();
 load(); migrate();
