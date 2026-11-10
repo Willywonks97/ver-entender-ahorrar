@@ -1,5 +1,5 @@
 // Guarda la app en el móvil para que abra al instante y sin conexión.
-const CACHE = "mi-hucha-v48";
+const CACHE = "mi-hucha-v49";
 const CORE = ["./", "./index.html", "./hucha.html", "./ahorros.html", "./subs.html", "./ofertas.json", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE))); self.skipWaiting(); });
 self.addEventListener("activate", e => {
@@ -11,7 +11,8 @@ self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   // La propia app: primero red (para recibir actualizaciones), si no hay, la copia guardada
   if (url.origin === location.origin) {
-    e.respondWith(fetch(e.request).then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cp)); return r; })
+    // siempre pregunta a GitHub por la versión más reciente (no usa la copia del navegador); sin conexión, la guardada
+    e.respondWith(fetch(new Request(url.href, { cache: "no-cache", credentials: "same-origin" })).then(r => { const cp = r.clone(); caches.open(CACHE).then(c => c.put(e.request, cp)); return r; })
       .catch(() => caches.match(e.request).then(r => r || caches.match("./index.html"))));
     return;
   }
