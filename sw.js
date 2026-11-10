@@ -1,5 +1,5 @@
 // Guarda la app en el móvil para que abra al instante y sin conexión.
-const CACHE = "mi-hucha-v47";
+const CACHE = "mi-hucha-v48";
 const CORE = ["./", "./index.html", "./hucha.html", "./ahorros.html", "./subs.html", "./ofertas.json", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE))); self.skipWaiting(); });
 self.addEventListener("activate", e => {

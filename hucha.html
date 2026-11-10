@@ -121,7 +121,7 @@ small.neg,.flow .r.neg b{color:var(--red)!important}
 .triage b{color:var(--yellow)}
 
 /* Plan */
-.inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end}
 .field{display:flex;flex-direction:column;gap:5px;font-size:.82rem;color:var(--muted)}
 .money{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:8px 10px}
 .money input{border:0;background:transparent;outline:none;width:100%;min-width:0;font-family:var(--f-num);font-size:1.25rem;color:var(--ink)}
@@ -306,7 +306,7 @@ textarea.paste{width:100%;min-height:80px;border:1px solid var(--line);border-ra
 
     <section class="card" id="limCard">
       <div class="cardhead"><h2>Presupuesto por categoría</h2></div>
-      <p class="note">Se calculan solos con lo que gastas normalmente en cada categoría, fijos incluidos. Si cambias uno, ese se queda como lo pongas (✎). En «Hoy» ves cómo vas.</p>
+      <p class="note">Se calculan solos con lo que gastas normalmente en el día a día de cada categoría. Los gastos fijos no cuentan aquí: ya están restados en «Para el día a día». Si cambias uno, ese se queda como lo pongas (✎). En «Hoy» ves cómo vas.</p>
       <div id="limSum"></div>
       <div id="limList"></div>
     </section>
@@ -677,7 +677,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.6";
+const APP_VERSION="1.0.7";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -804,6 +804,8 @@ function monthStatus(k){
   const day=k===cur?now.getDate():(k<cur?dim:0);
   return{dim,day,rem:dim-day+1,dia,fijo,grande,mov,total:dia+fijo+grande+mov,isCur:k===cur};
 }
+// gasto del día a día por categoría (sin fijos ni movimientos): es lo que se compara con los presupuestos
+function catSpentDia(k){const by={};items(k).forEach(i=>{if(kindOf(i)!=="dia")return;by[i.cat]=(by[i.cat]||0)+i.amount});return by}
 function catSpent(k){const by={};items(k).forEach(i=>{if(kindOf(i)==="mov")return;by[i.cat]=(by[i.cat]||0)+i.amount});return by}
 
 /* ================= Nombres legibles: solo cambia cómo se muestra, nunca el dato ================= */
@@ -912,7 +914,7 @@ function renderSummary(P,S,cur,mesNom){
   }
 }
 function renderBudgets(cur,S){
-  const c=$("budCard"); c.textContent=""; const sp=catSpent(cur);
+  const c=$("budCard"); c.textContent=""; const sp=catSpentDia(cur);
   const list=cats().filter(x=>+x.budget>0).map(x=>({c:x,b:+x.budget,s:sp[x.id]||0})).sort((a,b)=>b.s/b.b-a.s/a.b);
   c.hidden=!list.length; if(!list.length) return;
   const hd=el("div","cardhead"); hd.appendChild(el("h2",null,"Presupuestos"));
@@ -1126,7 +1128,7 @@ function openTriage(){
 /* ================= PLAN ================= */
 
 /* Presupuestos por categoría: se calculan solos con tu consumo normal (mediana de los últimos meses + fijos). Si cambias uno a mano, ese no se toca. */
-function realOf(c){return (PLAN.catMed[c.id]||0)+(PLAN.fixedByCat[c.id]||0)}
+function realOf(c){return PLAN.catMed[c.id]||0} // solo el día a día: los fijos van aparte
 function autoBudgets(){
   const C=state.config; let ch=false;
   if(!C.budgetsPrev){C.budgetsPrev={};cats().forEach(c=>C.budgetsPrev[c.id]=+c.budget||0);ch=true}
@@ -1161,11 +1163,11 @@ function planInput(){state.config.income=num($("income").value);clearTimeout(pla
 $("income").addEventListener("input",planInput);
 
 function renderLimits(){
-  const P=PLAN, k=monthKey(new Date()), sp=catSpent(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0), vivir=P.income-P.goal;
+  const P=PLAN, k=monthKey(new Date()), sp=catSpentDia(k), sum=cats().reduce((a,c)=>a+(+c.budget||0),0), vivir=Math.max(0,P.allowed);
   const ls=$("limSum"); ls.textContent="";
   const line=el("p","sumline"); ls.appendChild(line);
-  if(P.configured&&sum>vivir+5){line.classList.add("bad");line.textContent="Tu consumo normal suma "+fmt(sum)+" al mes. El 50 % de tu sueldo para vivir son "+fmt(vivir)+": te pasas "+fmt(sum-vivir)+"."}
-  else if(P.configured&&sum>0) line.textContent="Tu consumo normal suma "+fmt(sum)+" al mes, dentro de los "+fmt(vivir)+" del 50 % de tu sueldo.";
+  if(P.configured&&sum>vivir+5){line.classList.add("bad");line.textContent="Tu día a día normal suma "+fmt(sum)+" al mes. Para el día a día tienes "+fmt(vivir)+" (el 50 % para vivir menos los fijos): te pasas "+fmt(sum-vivir)+"."}
+  else if(P.configured&&sum>0) line.textContent="Tu día a día normal suma "+fmt(sum)+" al mes, dentro de los "+fmt(vivir)+" que tienes para el día a día.";
   else line.textContent=sum?"Tu consumo normal suma "+fmt(sum)+" al mes.":"Aún no hay meses completos para calcular tu consumo.";
   if(cats().some(c=>c.manual)){const b=el("button","btn",""+"Volver todos a automático");b.type="button";b.onclick=()=>{cats().forEach(c=>{delete c.manual});save();renderAll();toast("Presupuestos en automático")};ls.appendChild(b)}
   const real=cats().reduce((a,c)=>a+realOf(c),0), esc=real>0&&P.configured?vivir/real:0;
@@ -1178,7 +1180,7 @@ function renderLimits(){
     i.addEventListener("change",()=>{const v=num(i.value);if(i.value.trim()===""){delete c.manual}else{c.manual=true}c.budget=v;save();renderAll()}); m.append(i,el("span",null,"€"));
     r.append(n,m);
     if(b){const bar=el("div","bar"),ratio=s/b;const f=el("i",ratio>=1?"bad":ratio>=0.8?"warn":"");f.style.width=Math.min(100,ratio*100)+"%";bar.appendChild(f);r.appendChild(bar)}
-    r.appendChild(el("small",null,"Este mes: "+fmt(s)+(b?" de "+fmt(b):"")+(esc&&normal>0?" · para el 50 %: "+fmt(normal*esc):"")));
+    r.appendChild(el("small",null,"Este mes: "+fmt(s)+(b?" de "+fmt(b):"")+(esc&&normal>0?" · para cuadrar: "+fmt(normal*esc):"")));
     L.appendChild(r);
   });
 }
