@@ -677,7 +677,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.10";
+const APP_VERSION="1.0.11";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -1466,7 +1466,7 @@ function renderProgresion(){
   if(!ms.length&&!C.aportes.length){card.appendChild(el("p","note","Aún no ha acabado ningún mes. Cuando termine "+MES[+monthKey(new Date()).slice(5,7)-1]+", aparecerá aquí lo que has ahorrado."));return}
   // barras: cada mes y, en su fecha, cada aportación que hagas a mano (no cambian lo ahorrado del mes)
   C.movs=C.movs||[];
-  const bars=ms.map(m=>({v:m.v,lab:mesCorto(m.k),ord:m.k+"-99"}))
+  const bars=ms.map(m=>({v:m.v,lab:mesCorto(m.k),ord:m.k+"-99",info:MES[+m.k.slice(5,7)-1].replace(/^./,c=>c.toUpperCase())+" · Gastos: "+fmt(m.gastado+m.fijos)+" · Ahorro: "+fmt(m.v)+(m.manual?" (corregido por ti)":"")}))
     .concat(C.aportes.map(a=>({v:+a.amount||0,lab:"Aportación",ord:a.date+"~"+a.id,info:"Aportación de "+fmt(a.amount)+" · "+fmtDay(a.date)})))
     .concat(C.movs.filter(x=>x.tipo==="ext").map(x=>({v:-(+x.amount||0),lab:"Extracción",ext:x,ord:x.date+"~"+x.id,info:"Extracción de "+fmt(x.amount)+" de "+REPARTO[x.from][0].toLowerCase()+" · "+fmtDay(x.date)+(x.nota?" · "+x.nota:"")})))
     .sort((a,b)=>a.ord.localeCompare(b.ord));
