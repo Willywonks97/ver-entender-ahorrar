@@ -677,7 +677,7 @@ const QUOTES=[
 
 
 /* Versión de la app: súbela en cada cambio publicado */
-const APP_VERSION="1.0.9";
+const APP_VERSION="1.0.10";
 
 /* ================= Datos ================= */
 const DEFAULT_CATS=[
@@ -1468,7 +1468,7 @@ function renderProgresion(){
   C.movs=C.movs||[];
   const bars=ms.map(m=>({v:m.v,lab:mesCorto(m.k),ord:m.k+"-99"}))
     .concat(C.aportes.map(a=>({v:+a.amount||0,lab:"Aportación",ord:a.date+"~"+a.id,info:"Aportación de "+fmt(a.amount)+" · "+fmtDay(a.date)})))
-    .concat(C.movs.filter(x=>x.tipo==="ext").map(x=>({v:-(+x.amount||0),lab:"Extracción",ord:x.date+"~"+x.id,info:"Extracción de "+fmt(x.amount)+" de "+REPARTO[x.from][0].toLowerCase()+" · "+fmtDay(x.date)+(x.nota?" · "+x.nota:"")})))
+    .concat(C.movs.filter(x=>x.tipo==="ext").map(x=>({v:-(+x.amount||0),lab:"Extracción",ext:x,ord:x.date+"~"+x.id,info:"Extracción de "+fmt(x.amount)+" de "+REPARTO[x.from][0].toLowerCase()+" · "+fmtDay(x.date)+(x.nota?" · "+x.nota:"")})))
     .sort((a,b)=>a.ord.localeCompare(b.ord));
   const NS="http://www.w3.org/2000/svg",W=340,H=170,top=18,bot=22,n=bars.length,bw=Math.min(70,W/n);
   const max=Math.max(1,...bars.map(m=>m.v)),min=Math.min(0,...bars.map(m=>m.v));
@@ -1481,7 +1481,9 @@ function renderProgresion(){
   bars.forEach((m,i)=>{
     const cx=off+i*bw+bw/2,w=bw*0.55,hh=Math.max(2,Math.abs(y(m.v)-y(0)));
     const rc=mk("rect",{x:cx-w/2,y:y(Math.max(0,m.v)),width:w,height:hh,rx:3,fill:m.v<0?"#FF4766":"#3DFFA8"});
-    if(m.info){rc.style.cursor="pointer";const show=()=>toast(m.info);rc.addEventListener("click",show);const hit=mk("rect",{x:cx-bw/2,y:top,width:bw,height:H-top-bot,fill:"transparent"});hit.style.cursor="pointer";hit.addEventListener("click",show)}
+    if(m.info){const show=m.ext?()=>openExtraccion(m.ext,m.info):()=>toast(m.info);
+      const hit=mk("rect",{x:cx-bw/2,y:top,width:bw,height:H-top-bot,fill:"transparent"});
+      [rc,hit].forEach(e=>{e.style.cursor="pointer";e.addEventListener("click",show);const t=document.createElementNS(NS,"title");t.textContent=m.info;e.appendChild(t)})}
     const tv=mk("text",{x:cx,y:m.v<0?y(m.v)+11:y(m.v)-4,"text-anchor":"middle",class:"v"});tv.textContent=fmt(m.v);
     const tl=mk("text",{x:cx,y:H-6,"text-anchor":"middle"});tl.textContent=n>5&&m.lab==="Aportación"?"Aport.":n>5&&m.lab==="Extracción"?"Extr.":m.lab;
   });
@@ -1543,6 +1545,16 @@ function openMover(p,parts){
     const r=el("button","btn go","Redistribuir");r.type="button";r.onclick=redistribuir;
     const c=el("button","btn","Consumir −");c.type="button";c.onclick=consumir;
     bt.append(r,c);body.appendChild(bt);
+  });
+}
+// pulsar una barra «Extracción»: ver sus datos y poder retrocederla (el dinero vuelve a su casilla)
+function openExtraccion(x,info){
+  openSheet(sh=>{
+    sheetHead(sh,"Extracción");
+    sh.appendChild(el("p",null,info));
+    const b=el("button","btn danger");b.type="button";
+    twoTap(b,"Retroceder",()=>{state.config.movs=state.config.movs.filter(m=>m.id!==x.id);save();closeSheet();renderAll();toast(fmt(x.amount)+" devueltos a "+REPARTO[x.from][0].toLowerCase())});
+    sh.appendChild(b);
   });
 }
 function openAportar(){
